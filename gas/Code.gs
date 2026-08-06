@@ -133,8 +133,8 @@ function savePhoto(dataUrl, id) {
   const folder = getFolder(PHOTO_FOLDER);
   const file = folder.createFile(blob);
   file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-  // 画像を直接表示できる形式のURL
-  return "https://drive.google.com/uc?export=view&id=" + file.getId();
+  // <img>で表示できる形式（uc?export=view は仕様変更で表示不可のため thumbnail を使う）
+  return "https://drive.google.com/thumbnail?id=" + file.getId() + "&sz=w1200";
 }
 function getFolder(name) {
   const it = DriveApp.getFoldersByName(name);

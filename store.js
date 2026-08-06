@@ -163,6 +163,16 @@ const Util = {
     const d = new Date(iso);
     return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,"0")}/${String(d.getDate()).padStart(2,"0")}`;
   },
+  // 写真URLを表示可能な形式に整える。
+  // デモのdataURLはそのまま。ドライブのURL(uc?export=view 等)はファイルIDを取り出して
+  // thumbnail形式に変換する（uc形式は<img>表示不可のため）。
+  photoUrl(raw) {
+    if (!raw) return "";
+    const s = String(raw);
+    if (s.indexOf("data:") === 0) return s;
+    const m = s.match(/[-\w]{25,}/);
+    return m ? `https://drive.google.com/thumbnail?id=${m[0]}&sz=w1200` : s;
+  },
   // 撮影画像を縮小して dataURL(JPEG) に変換（保存容量を抑える）
   fileToResizedDataUrl(file, maxSize = 900, quality = 0.6) {
     return new Promise((resolve, reject) => {

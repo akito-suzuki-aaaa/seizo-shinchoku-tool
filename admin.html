@@ -131,7 +131,7 @@ function openDetail(pid){
       <td class="hide-sp">${l.qty||""}</td>
       <td>${l.author}</td>
       <td>${l.comment||""}</td>
-      <td>${l.photo?`<img src="${l.photo}" style="width:44px;height:44px;object-fit:cover;border-radius:6px;cursor:pointer" onclick="window.open('').document.write('<img src=\\'${l.photo}\\' style=max-width:100%>')">`:""}</td>
+      <td>${l.photo?(p=>`<img src="${p}" style="width:44px;height:44px;object-fit:cover;border-radius:6px;cursor:pointer" onclick="window.open('${p}','_blank')">`)(Util.photoUrl(l.photo)):""}</td>
     </tr>`).join("");
   document.getElementById("detailCard").scrollIntoView({behavior:"smooth"});
 }

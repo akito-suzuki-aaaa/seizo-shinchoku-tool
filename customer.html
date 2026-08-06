@@ -151,7 +151,7 @@ async function openDetail(pid){
     <div class="tl-item">
       <div class="tl-meta">${Util.fmtDate(l.datetime)} ・ ${processMap[l.processId]||""} ・ ${l.status}</div>
       <div class="tl-text">${l.comment||""}</div>
-      ${l.photo?`<img class="tl-photo" src="${l.photo}" alt="現場写真" onclick="window.open('').document.write('<img src=\\'${l.photo}\\' style=max-width:100%>')">`:""}
+      ${l.photo?(p=>`<img class="tl-photo" src="${p}" alt="現場写真" onclick="window.open('${p}','_blank')">`)(Util.photoUrl(l.photo)):""}
     </div>`).join("") || '<p class="empty">まだ記録がありません</p>';
   window.scrollTo({top:0, behavior:"smooth"});
 }
