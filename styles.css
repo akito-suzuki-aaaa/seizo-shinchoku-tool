@@ -84,7 +84,16 @@ tr.clickable:hover td{background:#f7f8fa}
 .tl-item::before{content:""; position:absolute; left:-23px; top:4px; width:10px; height:10px; border-radius:50%; background:var(--accent); border:2px solid #fff}
 .tl-meta{font-size:12px; color:var(--muted)}
 .tl-text{font-size:14px; margin:3px 0 6px}
-.tl-photo{width:120px; height:80px; object-fit:cover; border-radius:8px; border:1px solid var(--line); cursor:pointer}
+.tl-photo{width:280px; max-width:100%; height:200px; object-fit:cover; border-radius:10px; border:1px solid var(--line); cursor:zoom-in; transition:filter .15s}
+.tl-photo:hover{filter:brightness(.93)}
+
+/* 写真ポップアップ（ライトボックス） */
+.lightbox{position:fixed; inset:0; background:rgba(0,0,0,.82); display:flex; align-items:center; justify-content:center; padding:24px; z-index:1000; cursor:zoom-out}
+.lightbox img{max-width:100%; max-height:100%; border-radius:10px; box-shadow:0 8px 40px rgba(0,0,0,.5)}
+.lightbox-close{position:fixed; top:14px; right:18px; width:46px; height:46px; border-radius:50%; border:none; background:rgba(255,255,255,.18); color:#fff; font-size:28px; line-height:1; cursor:pointer}
+.lightbox-close:hover{background:rgba(255,255,255,.3)}
+.list-thumb{width:64px; height:64px; object-fit:cover; border-radius:8px; border:1px solid var(--line); cursor:zoom-in}
+.list-thumb:hover{filter:brightness(.93)}
 
 /* 写真プレビュー（入力画面） */
 .thumbs{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px}

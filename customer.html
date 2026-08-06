@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>進捗確認 — お客様用</title>
-<link rel="stylesheet" href="styles.css?v=3">
+<link rel="stylesheet" href="styles.css?v=4">
 </head>
 <body>
 <div class="topbar">
@@ -62,7 +62,7 @@
   <p class="hint" style="text-align:center"><a href="index.html">← 入口にもどる</a></p>
 </div>
 
-<script src="store.js?v=3"></script>
+<script src="store.js?v=4"></script>
 <script>
 let me=null, myProjects=[], processMap={};
 
@@ -151,7 +151,7 @@ async function openDetail(pid){
     <div class="tl-item">
       <div class="tl-meta">${Util.fmtDate(l.datetime)} ・ ${processMap[l.processId]||""} ・ ${l.status}</div>
       <div class="tl-text">${l.comment||""}</div>
-      ${l.photo?(p=>`<img class="tl-photo" src="${p}" alt="現場写真" onclick="window.open('${p}','_blank')">`)(Util.photoUrl(l.photo)):""}
+      ${l.photo?(p=>`<img class="tl-photo" src="${p}" alt="現場写真" onclick="Util.openImage('${p}')">`)(Util.photoUrl(l.photo)):""}
     </div>`).join("") || '<p class="empty">まだ記録がありません</p>';
   window.scrollTo({top:0, behavior:"smooth"});
 }

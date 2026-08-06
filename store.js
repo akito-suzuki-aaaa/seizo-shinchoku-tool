@@ -173,6 +173,18 @@ const Util = {
     const m = s.match(/[-\w]{25,}/);
     return m ? `https://drive.google.com/thumbnail?id=${m[0]}&sz=w1200` : s;
   },
+  // 写真をポップアップ（ライトボックス）で大きく表示。背景・×・ESCで閉じる。
+  openImage(src) {
+    if (!src) return;
+    const ov = document.createElement("div");
+    ov.className = "lightbox";
+    ov.innerHTML = `<button class="lightbox-close" aria-label="閉じる">×</button><img src="${src}" alt="写真">`;
+    const close = () => { ov.remove(); document.removeEventListener("keydown", onKey); };
+    const onKey = (e) => { if (e.key === "Escape") close(); };
+    ov.addEventListener("click", close);
+    document.addEventListener("keydown", onKey);
+    document.body.appendChild(ov);
+  },
   // 撮影画像を縮小して dataURL(JPEG) に変換（保存容量を抑える）
   fileToResizedDataUrl(file, maxSize = 900, quality = 0.6) {
     return new Promise((resolve, reject) => {
