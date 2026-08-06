@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>製造進捗管理ツール</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="topbar">
+  <div>
+    <h1>製造進捗管理ツール</h1>
+    <div class="sub">プロトタイプ</div>
+  </div>
+  <span id="mode" class="demo-tag">デモモード</span>
+</div>
+
+<div class="wrap">
+  <p class="hint" style="margin-top:16px">
+    3つの画面で構成されています。デモモードでは同じブラウザ内でデータが共有されます
+    （社員が記録 → 管理画面・顧客画面に反映）。
+  </p>
+
+  <div class="launch">
+    <a href="employee.html">
+      <div class="ic">📱</div>
+      <h3>社員用・スマホ入力</h3>
+      <p>案件・工程を選んで進捗・写真を記録</p>
+    </a>
+    <a href="admin.html">
+      <div class="ic">💻</div>
+      <h3>社内管理・データベース</h3>
+      <p>全案件の状況／日報・報告書の生成</p>
+    </a>
+    <a href="customer.html">
+      <div class="ic">🔒</div>
+      <h3>お客様用・進捗確認</h3>
+      <p>ログインして自社の案件を閲覧（閲覧のみ）</p>
+    </a>
+  </div>
+
+  <div class="card" style="margin-top:24px">
+    <h2>デモの使い方</h2>
+    <ol style="font-size:14px; padding-left:20px; margin:0">
+      <li>「社員用」で案件を選び、進捗率や写真を入れて<b>送信</b>。</li>
+      <li>「社内管理」で案件をクリックすると履歴が見え、<b>日報・報告書</b>を生成できます。</li>
+      <li>「お客様用」で <b>a-sha / 1234</b> でログインすると、A社の案件だけ時系列で見られます。</li>
+    </ol>
+    <p style="margin-top:14px">
+      <button class="btn btn-sm" id="reset">デモデータを初期化</button>
+    </p>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="store.js"></script>
+<script>
+if(!Store.isDemo()) document.getElementById("mode").style.display="none";
+document.getElementById("reset").onclick = ()=>{
+  Store.resetDemo();
+  const t=document.getElementById("toast");
+  t.textContent="初期化しました"; t.classList.add("show");
+  setTimeout(()=>t.classList.remove("show"),1800);
+};
+</script>
+</body>
+</html>

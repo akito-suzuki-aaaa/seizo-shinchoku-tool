@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>進捗を記録 — 社員用</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="topbar">
+  <div>
+    <h1>進捗を記録</h1>
+    <div class="sub">社員用・現場入力</div>
+  </div>
+  <span id="mode" class="demo-tag">デモ</span>
+</div>
+
+<div class="wrap-narrow">
+  <div class="card">
+    <label for="project">案件</label>
+    <select id="project"></select>
+
+    <label for="process">工程</label>
+    <select id="process"></select>
+
+    <label>進捗率 <span id="progVal" style="color:var(--text); font-weight:600">0%</span></label>
+    <input type="range" id="progress" min="0" max="100" step="5" value="0">
+
+    <div class="row">
+      <div>
+        <label for="qty">数量</label>
+        <input type="number" id="qty" inputmode="numeric" placeholder="0">
+      </div>
+      <div>
+        <label for="status">ステータス</label>
+        <select id="status">
+          <option>未着手</option>
+          <option selected>作業中</option>
+          <option>完了</option>
+          <option>要確認</option>
+        </select>
+      </div>
+    </div>
+
+    <label for="author">入力者</label>
+    <input type="text" id="author" placeholder="氏名（例：鈴木）">
+
+    <label for="comment">コメント・作業メモ</label>
+    <textarea id="comment" placeholder="作業内容・気づき・不具合など"></textarea>
+
+    <label>写真</label>
+    <div class="thumbs" id="thumbs">
+      <label class="thumb-add" for="photo">＋</label>
+    </div>
+    <input type="file" id="photo" accept="image/*" capture="environment" style="display:none">
+    <p class="hint" style="margin-top:6px">現場写真を1枚まで。撮影すると自動で縮小して保存します。</p>
+
+    <div style="margin-top:18px">
+      <button class="btn-primary btn" id="submit">送信して記録</button>
+    </div>
+  </div>
+
+  <p class="hint" style="text-align:center">
+    <a href="index.html">← 入口にもどる</a>
+  </p>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="store.js"></script>
+<script>
+let photoData = "";
+
+async function init(){
+  if(!Store.isDemo()) document.getElementById("mode").style.display="none";
+  const projects = await Store.getProjects();
+  const sel = document.getElementById("project");
+  sel.innerHTML = projects.map(p=>`<option value="${p.id}">${p.customerName} ${p.name}</option>`).join("");
+  sel.onchange = loadProcesses;
+  await loadProcesses();
+}
+
+async function loadProcesses(){
+  const pid = document.getElementById("project").value;
+  const procs = await Store.getProcesses(pid);
+  document.getElementById("process").innerHTML =
+    procs.map(w=>`<option value="${w.id}">${w.name}</option>`).join("");
+}
+
+document.getElementById("progress").oninput = (e)=>{
+  document.getElementById("progVal").textContent = e.target.value + "%";
+};
+
+document.getElementById("photo").onchange = async (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  photoData = await Util.fileToResizedDataUrl(file);
+  const thumbs = document.getElementById("thumbs");
+  thumbs.innerHTML = `<img class="thumb" src="${photoData}" alt="撮影写真">
+    <label class="thumb-add" for="photo">↺</label>`;
+};
+
+document.getElementById("submit").onclick = async ()=>{
+  const btn = document.getElementById("submit");
+  const projectId = document.getElementById("project").value;
+  const processId = document.getElementById("process").value;
+  const author = document.getElementById("author").value.trim();
+  if(!author){ toast("入力者の氏名を入れてください"); return; }
+
+  btn.disabled = true; btn.textContent = "送信中…";
+  try{
+    await Store.addLog({
+      projectId, processId,
+      datetime: new Date().toISOString(),
+      author,
+      progress: Number(document.getElementById("progress").value),
+      status: document.getElementById("status").value,
+      qty: Number(document.getElementById("qty").value || 0),
+      comment: document.getElementById("comment").value.trim(),
+      photo: photoData,
+    });
+    toast("記録しました ✓");
+    // 入力をリセット（案件・工程・入力者は残す）
+    document.getElementById("comment").value = "";
+    document.getElementById("qty").value = "";
+    photoData = "";
+    document.getElementById("thumbs").innerHTML = `<label class="thumb-add" for="photo">＋</label>`;
+  }catch(err){
+    toast("エラー: " + err.message);
+  }finally{
+    btn.disabled = false; btn.textContent = "送信して記録";
+  }
+};
+
+function toast(msg){
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.classList.add("show");
+  setTimeout(()=>t.classList.remove("show"), 2200);
+}
+
+init();
+</script>
+</body>
+</html>
