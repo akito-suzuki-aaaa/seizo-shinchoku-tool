@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <title>進捗を記録 — 社員用</title>
-<link rel="stylesheet" href="styles.css?v=5">
+<link rel="stylesheet" href="styles.css?v=6">
 </head>
 <body>
 <div class="topbar">
@@ -49,11 +49,14 @@
     <textarea id="comment" placeholder="作業内容・気づき・不具合など"></textarea>
 
     <label>写真（複数可）</label>
-    <div class="thumbs gallery" id="thumbs">
-      <label class="thumb-add" for="photo">＋</label>
+    <div class="thumbs gallery" id="thumbs"></div>
+    <div class="row" style="margin-top:8px">
+      <button type="button" class="btn" id="btnCam">📷 撮影</button>
+      <button type="button" class="btn" id="btnLib">🖼 画像を選ぶ</button>
     </div>
-    <input type="file" id="photo" accept="image/*" multiple style="display:none">
-    <p class="hint" style="margin-top:6px">現場写真を何枚でも。各写真の「描く」で矢印などを書き込めます。撮影時は自動で縮小して保存します。</p>
+    <input type="file" id="photoCam" accept="image/*" capture="environment" style="display:none">
+    <input type="file" id="photoLib" accept="image/*" multiple style="display:none">
+    <p class="hint" style="margin-top:6px">「撮影」でその場で撮影、「画像を選ぶ」で複数枚まとめて追加。各写真の「描く」で矢印などを書き込めます。</p>
 
     <div style="margin-top:18px">
       <button class="btn-primary btn" id="submit">送信して記録</button>
@@ -67,8 +70,8 @@
 
 <div class="toast" id="toast"></div>
 
-<script src="store.js?v=5"></script>
-<script src="annotate.js?v=5"></script>
+<script src="store.js?v=6"></script>
+<script src="annotate.js?v=6"></script>
 <script>
 let photos = [];
 
@@ -99,18 +102,21 @@ function renderPhotos(){
       <img class="thumb" src="${src}" alt="写真${i+1}">
       <button class="g-del" onclick="delPhoto(${i})" title="削除">×</button>
       <button class="g-edit" onclick="editPhoto(${i})">描く</button>
-    </div>`).join("") + `<label class="thumb-add" for="photo">＋</label>`;
+    </div>`).join("");
 }
 window.delPhoto = (i)=>{ photos.splice(i,1); renderPhotos(); };
 window.editPhoto = (i)=>{ Annotator.open(photos[i], (data)=>{ photos[i]=data; renderPhotos(); }); };
 
-document.getElementById("photo").onchange = async (e)=>{
-  for(const file of e.target.files){
+async function addFiles(fileList){
+  for(const file of fileList){
     photos.push(await Util.fileToResizedDataUrl(file));
   }
-  e.target.value = "";
   renderPhotos();
-};
+}
+document.getElementById("btnCam").onclick = ()=> document.getElementById("photoCam").click();
+document.getElementById("btnLib").onclick = ()=> document.getElementById("photoLib").click();
+document.getElementById("photoCam").onchange = async (e)=>{ await addFiles(e.target.files); e.target.value=""; };
+document.getElementById("photoLib").onchange = async (e)=>{ await addFiles(e.target.files); e.target.value=""; };
 
 document.getElementById("submit").onclick = async ()=>{
   const btn = document.getElementById("submit");
