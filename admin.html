@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>社内管理 — 進捗データベース</title>
-<link rel="stylesheet" href="styles.css?v=6">
+<link rel="stylesheet" href="styles.css?v=7">
 </head>
 <body>
 <div class="topbar">
@@ -52,8 +52,8 @@
 
 <div class="toast" id="toast"></div>
 
-<script src="store.js?v=6"></script>
-<script src="annotate.js?v=6"></script>
+<script src="store.js?v=7"></script>
+<script src="annotate.js?v=7"></script>
 <script>
 let projects=[], allLogs=[], processMap={}, currentProjectId=null, adminPhotoSets={};
 
@@ -152,10 +152,10 @@ function openDetail(pid){
       <td>${(()=>{
         const list = Util.splitPhotos(l.photo);
         adminPhotoSets[l.id] = list;
-        return list.map((u,idx)=>`<span class="g-item" style="display:inline-block;margin:2px">
+        return list.map((u,idx)=>`<div class="admin-photo">
           <img class="list-thumb" src="${Util.photoUrl(u)}" alt="写真" onclick="openPhotos('${l.id}',${idx})">
-          <button class="g-edit" onclick="editLogPhoto('${l.id}',${idx})" title="描き込み・上書き">✎</button>
-        </span>`).join("");
+          <button class="btn-edit" onclick="editLogPhoto('${l.id}',${idx})">✏ 描き込み</button>
+        </div>`).join("");
       })()}</td>
     </tr>`).join("");
   document.getElementById("detailCard").scrollIntoView({behavior:"smooth"});
