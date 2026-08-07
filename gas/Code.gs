@@ -53,11 +53,25 @@ function setup() {
   ]);
 }
 
-// シートが未作成なら初回だけ自動でセットアップする
+// シートが未作成なら初回だけ自動でセットアップする（2回目以降はフラグで即スキップ）
 function ensureInitialized() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  if (!ss.getSheetByName("logs")) setup();
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty("inited")) return;
+  if (!SpreadsheetApp.getActiveSpreadsheet().getSheetByName("logs")) setup();
+  props.setProperty("inited", "1");
 }
+
+// getBundle を短時間キャッシュ（連続アクセス時にシート読込を省く）
+function getBundleData() {
+  const cache = CacheService.getScriptCache();
+  const hit = cache.get("bundle");
+  if (hit) return JSON.parse(hit);
+  const data = { projects: readAll("projects"), processes: readAll("processes"), logs: readAll("logs") };
+  const s = JSON.stringify(data);
+  if (s.length < 95000) { try { cache.put("bundle", s, 40); } catch (e) {} } // 40秒・100KB上限
+  return data;
+}
+function invalidateBundle() { try { CacheService.getScriptCache().remove("bundle"); } catch (e) {} }
 
 /* ---------- ルーティング ---------- */
 function doPost(e) {
@@ -78,8 +92,8 @@ function doGet() {
 function route(action, req) {
   ensureInitialized();
   switch (action) {
-    // 画面表示に必要なデータを1回でまとめて返す（round trip削減）
-    case "getBundle":    return { projects: readAll("projects"), processes: readAll("processes"), logs: readAll("logs") };
+    // 画面表示に必要なデータを1回でまとめて返す（round trip削減＋短時間キャッシュ）
+    case "getBundle":    return getBundleData();
     case "getProjects":  return readAll("projects");
     case "getProcesses": return readAll("processes").filter(p => p.projectId === req.projectId);
     case "getLogs":      return readAll("logs").filter(l => l.projectId === req.projectId);
@@ -106,6 +120,7 @@ function addLog(log) {
     log.progress, log.status, log.qty, log.comment, photoCell,
   ]]);
   updateProjectStatus(log.projectId, log.status);
+  invalidateBundle();
   return Object.assign({}, log, { id, photo: photoCell });
 }
 
@@ -118,6 +133,7 @@ function overwritePhoto(logId, oldUrl, newDataUrl) {
   const blob = Utilities.newBlob(Utilities.base64Decode(m[2]), m[1], oldId + ".jpg");
   // Advanced Drive Service で既存ファイルの中身を差し替え（メタデータは変更しない）
   Drive.Files.update({}, oldId, blob);
+  invalidateBundle();
   // セルのURLは変わらないので、現状のセルをそのまま返す
   return { photo: currentPhotoCell(logId), newUrl: oldUrl, sameFile: true };
 }

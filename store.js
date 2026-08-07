@@ -78,17 +78,42 @@ const Store = (() => {
   /* ---------- 本番モード：全データを1回で取得してキャッシュ ---------- */
   // GASは1リクエストが遅いため、画面表示に必要なデータをまとめて1回だけ取得する。
   let _bundle = null;
+  let _updateCb = null;             // 背景更新でデータが変わったら呼ぶ再描画用コールバック
+  let _persistCache = true;         // 端末(localStorage)に保存してよいか（顧客画面ではoffにする）
+  const BUNDLE_CACHE = "mfg_bundle_cache_v1";
+
   function normDate(v) {
     // スプレッドシート由来の日付(ISO)を YYYY-MM-DD に整える
     if (!v) return "";
     const s = String(v);
     return s.length >= 10 && s.indexOf("T") === 10 ? s.slice(0, 10) : s;
   }
+  function normalizeBundle(b) {
+    b.projects.forEach(p => { p.startDate = normDate(p.startDate); p.dueDate = normDate(p.dueDate); });
+    return b;
+  }
+  function readBundleCache() { if (!_persistCache) return null; try { const s = localStorage.getItem(BUNDLE_CACHE); return s ? JSON.parse(s) : null; } catch (e) { return null; } }
+  function writeBundleCache(b) { if (!_persistCache) return; try { localStorage.setItem(BUNDLE_CACHE, JSON.stringify(b)); } catch (e) {} }
+
+  async function fetchBundle() { return normalizeBundle(await gas("getBundle", {})); }
+
+  // 背景で最新データを取得し、変化があれば再描画コールバックを呼ぶ
+  async function refreshBundle() {
+    try {
+      const fresh = await fetchBundle();
+      const changed = JSON.stringify(fresh) !== JSON.stringify(_bundle);
+      _bundle = fresh; writeBundleCache(fresh);
+      if (changed && _updateCb) _updateCb();
+    } catch (e) {}
+  }
+
+  // stale-while-revalidate：キャッシュがあれば即返し、裏で最新化する
   async function bundle(force) {
     if (_bundle && !force) return _bundle;
-    const b = await gas("getBundle", {});
-    b.projects.forEach(p => { p.startDate = normDate(p.startDate); p.dueDate = normDate(p.dueDate); });
-    _bundle = b;
+    if (force) { await refreshBundle(); return _bundle; }
+    const cached = readBundleCache();
+    if (cached) { _bundle = cached; refreshBundle(); return _bundle; }
+    _bundle = await fetchBundle(); writeBundleCache(_bundle);
     return _bundle;
   }
 
@@ -100,6 +125,12 @@ const Store = (() => {
 
     // 本番モードで最新データを取り直したいとき（送信後など）に呼ぶ
     async refresh() { if (!isDemo()) await bundle(true); },
+
+    // 背景更新でデータが変わったときに呼ばれる再描画コールバックを登録
+    onUpdate(cb) { _updateCb = cb; },
+
+    // 端末への保存を無効化（顧客画面など、他社データを端末に残したくない場合）
+    disableDiskCache() { _persistCache = false; try { localStorage.removeItem(BUNDLE_CACHE); } catch (e) {} },
 
     async getProjects() {
       if (isDemo()) return load().projects;
@@ -138,7 +169,7 @@ const Store = (() => {
       const payload = Object.assign({}, log, { photos });
       delete payload.photo;
       const saved = await gas("addLog", { log: payload });
-      if (_bundle) _bundle.logs.push(Object.assign({}, log, saved));
+      if (_bundle) { _bundle.logs.push(Object.assign({}, log, saved)); writeBundleCache(_bundle); }
       return saved;
     },
 
@@ -159,7 +190,7 @@ const Store = (() => {
       const res = await gas("overwritePhoto", { logId, oldUrl, newDataUrl });
       const id = (String(oldUrl).match(/[-\w]{25,}/) || [])[0];
       if (id) Util._override[id] = newDataUrl; // 直後は手元の描き込み画像で表示
-      if (_bundle) { const l = _bundle.logs.find(x => x.id === logId); if (l) l.photo = res.photo; }
+      if (_bundle) { const l = _bundle.logs.find(x => x.id === logId); if (l) l.photo = res.photo; writeBundleCache(_bundle); }
       return res;
     },
 

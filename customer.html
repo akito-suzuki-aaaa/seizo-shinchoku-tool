@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>進捗確認 — お客様用</title>
-<link rel="stylesheet" href="styles.css?v=8">
+<link rel="stylesheet" href="styles.css?v=9">
 </head>
 <body>
 <div class="topbar">
@@ -62,10 +62,22 @@
   <p class="hint" style="text-align:center"><a href="index.html">← 入口にもどる</a></p>
 </div>
 
-<script src="store.js?v=8"></script>
+<script src="store.js?v=9"></script>
 <script>
+// 顧客端末には他社ぶんを含むデータを保存しない（メモリ内キャッシュのみ）
+Store.disableDiskCache();
+
 let me=null, myProjects=[], processMap={}, photoSets={};
 window.openPhotos = (logId, idx)=> Util.openImage(photoSets[logId], idx);
+
+// 背景で最新化されたら、一覧表示中なら自動で再描画
+Store.onUpdate(async ()=>{
+  if(!me) return;
+  const all = await Store.getProjects();
+  myProjects = all.filter(p=>p.customerId===me.id);
+  for(const p of myProjects){ const procs = await Store.getProcesses(p.id); procs.forEach(w=> processMap[w.id]=w.name); }
+  if(document.getElementById("listView").style.display!=="none") renderList();
+});
 
 /* ---- ログイン ---- */
 document.getElementById("doLogin").onclick = login;
