@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>進捗確認 — お客様用</title>
-<link rel="stylesheet" href="styles.css?v=4">
+<link rel="stylesheet" href="styles.css?v=5">
 </head>
 <body>
 <div class="topbar">
@@ -62,9 +62,10 @@
   <p class="hint" style="text-align:center"><a href="index.html">← 入口にもどる</a></p>
 </div>
 
-<script src="store.js?v=4"></script>
+<script src="store.js?v=5"></script>
 <script>
-let me=null, myProjects=[], processMap={};
+let me=null, myProjects=[], processMap={}, photoSets={};
+window.openPhotos = (logId, idx)=> Util.openImage(photoSets[logId], idx);
 
 /* ---- ログイン ---- */
 document.getElementById("doLogin").onclick = login;
@@ -147,12 +148,17 @@ async function openDetail(pid){
   document.getElementById("dBarWrap").className = "bar " + (prog>=100?"full":"");
   document.getElementById("dProg").textContent = prog+"%";
 
-  document.getElementById("timeline").innerHTML = logs.map(l=>`
-    <div class="tl-item">
+  document.getElementById("timeline").innerHTML = logs.map(l=>{
+    const list = Util.splitPhotos(l.photo);
+    photoSets[l.id] = list;
+    const gal = list.length ? `<div class="gallery">${list.map((u,idx)=>
+      `<img class="tl-photo" src="${Util.photoUrl(u)}" alt="現場写真" onclick="openPhotos('${l.id}',${idx})">`).join("")}</div>` : "";
+    return `<div class="tl-item">
       <div class="tl-meta">${Util.fmtDate(l.datetime)} ・ ${processMap[l.processId]||""} ・ ${l.status}</div>
       <div class="tl-text">${l.comment||""}</div>
-      ${l.photo?(p=>`<img class="tl-photo" src="${p}" alt="現場写真" onclick="Util.openImage('${p}')">`)(Util.photoUrl(l.photo)):""}
-    </div>`).join("") || '<p class="empty">まだ記録がありません</p>';
+      ${gal}
+    </div>`;
+  }).join("") || '<p class="empty">まだ記録がありません</p>';
   window.scrollTo({top:0, behavior:"smooth"});
 }
 

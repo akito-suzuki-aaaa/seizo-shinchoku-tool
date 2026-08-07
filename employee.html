@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <title>進捗を記録 — 社員用</title>
-<link rel="stylesheet" href="styles.css?v=4">
+<link rel="stylesheet" href="styles.css?v=5">
 </head>
 <body>
 <div class="topbar">
@@ -48,12 +48,12 @@
     <label for="comment">コメント・作業メモ</label>
     <textarea id="comment" placeholder="作業内容・気づき・不具合など"></textarea>
 
-    <label>写真</label>
-    <div class="thumbs" id="thumbs">
+    <label>写真（複数可）</label>
+    <div class="thumbs gallery" id="thumbs">
       <label class="thumb-add" for="photo">＋</label>
     </div>
-    <input type="file" id="photo" accept="image/*" capture="environment" style="display:none">
-    <p class="hint" style="margin-top:6px">現場写真を1枚まで。撮影すると自動で縮小して保存します。</p>
+    <input type="file" id="photo" accept="image/*" multiple style="display:none">
+    <p class="hint" style="margin-top:6px">現場写真を何枚でも。各写真の「描く」で矢印などを書き込めます。撮影時は自動で縮小して保存します。</p>
 
     <div style="margin-top:18px">
       <button class="btn-primary btn" id="submit">送信して記録</button>
@@ -67,9 +67,10 @@
 
 <div class="toast" id="toast"></div>
 
-<script src="store.js?v=4"></script>
+<script src="store.js?v=5"></script>
+<script src="annotate.js?v=5"></script>
 <script>
-let photoData = "";
+let photos = [];
 
 async function init(){
   if(!Store.isDemo()) document.getElementById("mode").style.display="none";
@@ -91,13 +92,24 @@ document.getElementById("progress").oninput = (e)=>{
   document.getElementById("progVal").textContent = e.target.value + "%";
 };
 
+function renderPhotos(){
+  const box = document.getElementById("thumbs");
+  box.innerHTML = photos.map((src,i)=>`
+    <div class="g-item">
+      <img class="thumb" src="${src}" alt="写真${i+1}">
+      <button class="g-del" onclick="delPhoto(${i})" title="削除">×</button>
+      <button class="g-edit" onclick="editPhoto(${i})">描く</button>
+    </div>`).join("") + `<label class="thumb-add" for="photo">＋</label>`;
+}
+window.delPhoto = (i)=>{ photos.splice(i,1); renderPhotos(); };
+window.editPhoto = (i)=>{ Annotator.open(photos[i], (data)=>{ photos[i]=data; renderPhotos(); }); };
+
 document.getElementById("photo").onchange = async (e)=>{
-  const file = e.target.files[0];
-  if(!file) return;
-  photoData = await Util.fileToResizedDataUrl(file);
-  const thumbs = document.getElementById("thumbs");
-  thumbs.innerHTML = `<img class="thumb" src="${photoData}" alt="撮影写真">
-    <label class="thumb-add" for="photo">↺</label>`;
+  for(const file of e.target.files){
+    photos.push(await Util.fileToResizedDataUrl(file));
+  }
+  e.target.value = "";
+  renderPhotos();
 };
 
 document.getElementById("submit").onclick = async ()=>{
@@ -117,14 +129,14 @@ document.getElementById("submit").onclick = async ()=>{
       status: document.getElementById("status").value,
       qty: Number(document.getElementById("qty").value || 0),
       comment: document.getElementById("comment").value.trim(),
-      photo: photoData,
+      photos: photos,
     });
     toast("記録しました ✓");
     // 入力をリセット（案件・工程・入力者は残す）
     document.getElementById("comment").value = "";
     document.getElementById("qty").value = "";
-    photoData = "";
-    document.getElementById("thumbs").innerHTML = `<label class="thumb-add" for="photo">＋</label>`;
+    photos = [];
+    renderPhotos();
   }catch(err){
     toast("エラー: " + err.message);
   }finally{

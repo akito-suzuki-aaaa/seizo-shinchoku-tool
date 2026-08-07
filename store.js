@@ -122,20 +122,50 @@ const Store = (() => {
     },
 
     async addLog(log) {
+      // log.photos は写真の配列（dataURL）。セルには改行区切りで保存する。
+      const photos = log.photos || (log.photo ? [log.photo] : []);
       if (isDemo()) {
         const db = load();
         log.id = "L" + Date.now();
+        log.photo = photos.join("\n");
+        delete log.photos;
         db.logs.push(log);
-        // 案件の全体ステータスを最新記録で更新
         const prj = db.projects.find(p => p.id === log.projectId);
         if (prj) prj.status = log.status;
         save(db);
         return log;
       }
-      const saved = await gas("addLog", { log });
-      // キャッシュに反映（次の画面表示で最新が見えるように）
+      const payload = Object.assign({}, log, { photos });
+      delete payload.photo;
+      const saved = await gas("addLog", { log: payload });
       if (_bundle) _bundle.logs.push(Object.assign({}, log, saved));
       return saved;
+    },
+
+    // 既存写真を注釈付きで上書き（oldUrlの1枚を newDataUrl に差し替え）
+    async overwritePhoto(logId, oldUrl, newDataUrl) {
+      if (isDemo()) {
+        const db = load();
+        const lg = db.logs.find(l => l.id === logId);
+        if (lg) {
+          const arr = Util.splitPhotos(lg.photo);
+          const idx = arr.indexOf(oldUrl);
+          if (idx >= 0) arr[idx] = newDataUrl; else arr.push(newDataUrl);
+          lg.photo = arr.join("\n");
+          save(db);
+        }
+        return { ok: true };
+      }
+      const res = await gas("overwritePhoto", { logId, oldUrl, newDataUrl });
+      if (_bundle) { const l = _bundle.logs.find(x => x.id === logId); if (l) l.photo = res.photo; }
+      return res;
+    },
+
+    // 既存写真を編集用に取得（CORSで汚染されないよう dataURL で受け取る）
+    async getPhotoData(url) {
+      if (isDemo()) return url; // デモはそのまま dataURL
+      const res = await gas("getPhotoData", { url });
+      return res.dataUrl;
     },
 
     async login(loginId, password) {
@@ -173,17 +203,35 @@ const Util = {
     const m = s.match(/[-\w]{25,}/);
     return m ? `https://drive.google.com/thumbnail?id=${m[0]}&sz=w1200` : s;
   },
-  // 写真をポップアップ（ライトボックス）で大きく表示。背景・×・ESCで閉じる。
-  openImage(src) {
-    if (!src) return;
+  // 保存された写真セル（改行区切り）を配列に分解
+  splitPhotos(raw) {
+    if (!raw) return [];
+    return String(raw).split(/\n+/).map(s => s.trim()).filter(Boolean);
+  },
+
+  // 写真をポップアップで大きく表示。単一URLでも、配列＋開始位置でも可（配列なら前後めくり）。
+  openImage(src, index) {
+    const list = Array.isArray(src) ? src.map(Util.photoUrl) : [Util.photoUrl(src)];
+    let i = index || 0;
     const ov = document.createElement("div");
     ov.className = "lightbox";
-    ov.innerHTML = `<button class="lightbox-close" aria-label="閉じる">×</button><img src="${src}" alt="写真">`;
+    ov.innerHTML = `
+      <button class="lightbox-close" aria-label="閉じる">×</button>
+      ${list.length > 1 ? '<button class="lightbox-nav lightbox-prev" aria-label="前へ">‹</button><button class="lightbox-nav lightbox-next" aria-label="次へ">›</button><div class="lightbox-count"></div>' : ''}
+      <img src="${list[i]}" alt="写真">`;
+    const imgEl = ov.querySelector("img");
+    const countEl = ov.querySelector(".lightbox-count");
+    const show = () => { imgEl.src = list[i]; if (countEl) countEl.textContent = `${i + 1} / ${list.length}`; };
+    const go = (d, e) => { e && e.stopPropagation(); i = (i + d + list.length) % list.length; show(); };
     const close = () => { ov.remove(); document.removeEventListener("keydown", onKey); };
-    const onKey = (e) => { if (e.key === "Escape") close(); };
+    const onKey = (e) => { if (e.key === "Escape") close(); else if (e.key === "ArrowLeft") go(-1); else if (e.key === "ArrowRight") go(1); };
     ov.addEventListener("click", close);
+    const prev = ov.querySelector(".lightbox-prev"), next = ov.querySelector(".lightbox-next");
+    if (prev) prev.addEventListener("click", (e) => go(-1, e));
+    if (next) next.addEventListener("click", (e) => go(1, e));
     document.addEventListener("keydown", onKey);
     document.body.appendChild(ov);
+    show();
   },
   // 撮影画像を縮小して dataURL(JPEG) に変換（保存容量を抑える）
   fileToResizedDataUrl(file, maxSize = 900, quality = 0.6) {

@@ -85,6 +85,8 @@ function route(action, req) {
     case "getLogs":      return readAll("logs").filter(l => l.projectId === req.projectId);
     case "getAllLogs":   return readAll("logs");
     case "addLog":       return addLog(req.log);
+    case "overwritePhoto": return overwritePhoto(req.logId, req.oldUrl, req.newDataUrl);
+    case "getPhotoData": return { dataUrl: getPhotoData(req.url) };
     case "login":        return login(req.loginId, req.password);
     default: throw new Error("unknown action: " + action);
   }
@@ -93,18 +95,50 @@ function route(action, req) {
 /* ---------- 各処理 ---------- */
 function addLog(log) {
   const id = "L" + Date.now();
-  let photoUrl = "";
-  if (log.photo && log.photo.indexOf("data:image") === 0) {
-    photoUrl = savePhoto(log.photo, id);
-  }
+  // 複数枚対応：dataURLはDriveへ保存、それ以外(既存URL)はそのまま。改行区切りで1セルに。
+  const photos = log.photos || (log.photo ? [log.photo] : []);
+  const urls = photos.map((p, i) =>
+    (String(p).indexOf("data:image") === 0) ? savePhoto(p, id + "_" + i, log.projectId) : p
+  ).filter(Boolean);
+  const photoCell = urls.join("\n");
   appendRows("logs", [[
     id, log.projectId, log.processId, log.datetime, log.author,
-    log.progress, log.status, log.qty, log.comment, photoUrl,
+    log.progress, log.status, log.qty, log.comment, photoCell,
   ]]);
-  // 案件の全体ステータスを更新
   updateProjectStatus(log.projectId, log.status);
-  return Object.assign({}, log, { id, photo: photoUrl });
+  return Object.assign({}, log, { id, photo: photoCell });
 }
+
+// 既存写真の1枚を、注釈付き画像で上書き（元ファイルはゴミ箱へ、行のURLを差し替え）
+function overwritePhoto(logId, oldUrl, newDataUrl) {
+  const sh = sheet("logs");
+  const rows = sh.getDataRange().getValues();
+  const H = SHEETS.logs;
+  const iId = H.indexOf("id"), iPhoto = H.indexOf("photo"), iProj = H.indexOf("projectId");
+  for (let r = 1; r < rows.length; r++) {
+    if (rows[r][iId] === logId) {
+      const list = String(rows[r][iPhoto]).split("\n").map(s => s.trim()).filter(Boolean);
+      const newUrl = savePhoto(newDataUrl, logId + "_" + Date.now(), rows[r][iProj]);
+      const oldId = extractDriveId(oldUrl);
+      const idx = list.findIndex(u => extractDriveId(u) === oldId);
+      if (idx >= 0) { trashFile(oldId); list[idx] = newUrl; } else { list.push(newUrl); }
+      const cell = list.join("\n");
+      sh.getRange(r + 1, iPhoto + 1).setValue(cell);
+      return { photo: cell, newUrl: newUrl };
+    }
+  }
+  throw new Error("log not found: " + logId);
+}
+
+// 編集用に画像をdataURLで返す（CanvasのCORS汚染回避）
+function getPhotoData(url) {
+  const id = extractDriveId(url);
+  const blob = DriveApp.getFileById(id).getBlob();
+  return "data:" + blob.getContentType() + ";base64," + Utilities.base64Encode(blob.getBytes());
+}
+
+function extractDriveId(u) { const m = String(u).match(/[-\w]{25,}/); return m ? m[0] : ""; }
+function trashFile(id) { try { DriveApp.getFileById(id).setTrashed(true); } catch (e) {} }
 
 function login(loginId, password) {
   const c = readAll("customers").find(x => String(x.loginId) === String(loginId) && String(x.password) === String(password));
@@ -125,21 +159,33 @@ function updateProjectStatus(projectId, status) {
   }
 }
 
-/* ---------- Drive に写真を保存 ---------- */
-function savePhoto(dataUrl, id) {
+/* ---------- Drive に写真を保存（案件ごとのサブフォルダに振り分け） ---------- */
+function savePhoto(dataUrl, id, projectId) {
   const m = dataUrl.match(/^data:(image\/\w+);base64,(.+)$/);
   if (!m) return "";
   const blob = Utilities.newBlob(Utilities.base64Decode(m[2]), m[1], id + ".jpg");
-  const folder = getFolder(PHOTO_FOLDER);
+  const folder = projectFolder(projectId);
   const file = folder.createFile(blob);
   file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
   // <img>で表示できる形式（uc?export=view は仕様変更で表示不可のため thumbnail を使う）
   return "https://drive.google.com/thumbnail?id=" + file.getId() + "&sz=w1200";
 }
+// 「進捗管理_写真 / 顧客名_案件名 /」の階層を用意して返す
+function projectFolder(projectId) {
+  const root = getFolder(PHOTO_FOLDER);
+  const prj = projectId ? readAll("projects").find(p => p.id === projectId) : null;
+  const name = prj ? sanitizeName(prj.customerName + "_" + prj.name) : "その他";
+  return getSubFolder(root, name);
+}
 function getFolder(name) {
   const it = DriveApp.getFoldersByName(name);
   return it.hasNext() ? it.next() : DriveApp.createFolder(name);
 }
+function getSubFolder(parent, name) {
+  const it = parent.getFoldersByName(name);
+  return it.hasNext() ? it.next() : parent.createFolder(name);
+}
+function sanitizeName(s) { return String(s).replace(/[\\/:*?"<>|]/g, "_").slice(0, 80); }
 
 /* ---------- スプレッドシート ユーティリティ ---------- */
 function sheet(name) { return SpreadsheetApp.getActiveSpreadsheet().getSheetByName(name); }

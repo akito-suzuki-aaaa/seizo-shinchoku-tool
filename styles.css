@@ -95,6 +95,37 @@ tr.clickable:hover td{background:#f7f8fa}
 .list-thumb{width:64px; height:64px; object-fit:cover; border-radius:8px; border:1px solid var(--line); cursor:zoom-in}
 .list-thumb:hover{filter:brightness(.93)}
 
+/* 写真ギャラリー（複数枚） */
+.gallery{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px}
+.gallery .tl-photo{width:200px; height:150px}
+.g-item{position:relative}
+.g-del{position:absolute; top:4px; right:4px; width:24px; height:24px; border-radius:50%; border:none; background:rgba(0,0,0,.6); color:#fff; font-size:15px; line-height:1; cursor:pointer}
+.g-edit{position:absolute; bottom:5px; right:5px; background:rgba(0,0,0,.62); color:#fff; border:none; border-radius:6px; font-size:12px; padding:3px 8px; cursor:pointer}
+
+/* ポップアップ 前後めくり */
+.lightbox-nav{position:fixed; top:50%; transform:translateY(-50%); width:52px; height:52px; border-radius:50%; border:none; background:rgba(255,255,255,.18); color:#fff; font-size:28px; cursor:pointer; z-index:1001}
+.lightbox-nav:hover{background:rgba(255,255,255,.32)}
+.lightbox-prev{left:14px}
+.lightbox-next{right:14px}
+.lightbox-count{position:fixed; bottom:16px; left:50%; transform:translateX(-50%); color:#fff; font-size:13px; background:rgba(0,0,0,.4); padding:4px 12px; border-radius:99px}
+
+/* 注釈エディタ */
+.anno{position:fixed; inset:0; background:#111; z-index:2000; display:flex; flex-direction:column}
+.anno-bar{display:flex; align-items:center; gap:6px; padding:8px; background:#1c1c1e; flex-wrap:wrap}
+.anno-stage{flex:1; display:flex; align-items:center; justify-content:center; overflow:hidden; padding:6px}
+.anno-canvas{touch-action:none; background:#000; box-shadow:0 0 0 1px #333}
+.anno-btn{background:#2c2c2e; color:#fff; border:1px solid #3a3a3c; border-radius:8px; padding:8px 12px; font-size:14px; cursor:pointer; font-family:inherit}
+.anno-btn.on{background:#2f6bd8; border-color:#2f6bd8}
+.anno-btn:active{transform:scale(.97)}
+.anno-save{background:#2f6bd8; border-color:#2f6bd8; font-weight:600}
+.anno-cancel{background:transparent}
+.anno-colors{display:inline-flex; gap:5px; margin-left:6px}
+.anno-col{width:26px; height:26px; border-radius:50%; border:2px solid #555; cursor:pointer; padding:0}
+.anno-col.on{border-color:#fff}
+.anno-w{display:inline-flex; align-items:center; gap:6px; color:#ccc; font-size:12px; margin-left:6px}
+.anno-w input{width:90px}
+@media(max-width:520px){ .anno-btn{padding:8px 10px; font-size:13px} .anno-w input{width:64px} }
+
 /* 写真プレビュー（入力画面） */
 .thumbs{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px}
 .thumb{width:72px; height:72px; border-radius:8px; object-fit:cover; border:1px solid var(--line)}
