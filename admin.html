@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>社内管理 — 進捗データベース</title>
-<link rel="stylesheet" href="styles.css?v=9">
+<link rel="stylesheet" href="styles.css?v=10">
 </head>
 <body>
 <div class="topbar">
@@ -15,7 +15,17 @@
   <span id="mode" class="demo-tag">デモ</span>
 </div>
 
-<div class="wrap">
+<div class="wrap-narrow" id="empLogin" style="display:none">
+  <div class="card" style="margin-top:24px">
+    <h2>社員ログイン</h2>
+    <label for="empPw">社員パスワード</label>
+    <input type="password" id="empPw" autocomplete="current-password">
+    <div style="margin-top:16px"><button class="btn btn-primary" id="empLoginBtn">ログイン</button></div>
+    <p class="hint" id="empErr" style="color:var(--danger); min-height:18px; margin-top:8px"></p>
+  </div>
+</div>
+
+<div class="wrap" id="adminMain" style="display:none">
   <div class="metrics">
     <div class="metric"><div class="k">進行中の案件</div><div class="v" id="mActive">–</div></div>
     <div class="metric"><div class="k">今日の記録</div><div class="v" id="mToday">–</div></div>
@@ -52,8 +62,8 @@
 
 <div class="toast" id="toast"></div>
 
-<script src="store.js?v=9"></script>
-<script src="annotate.js?v=9"></script>
+<script src="store.js?v=10"></script>
+<script src="annotate.js?v=10"></script>
 <script>
 let projects=[], allLogs=[], processMap={}, currentProjectId=null, adminPhotoSets={};
 
@@ -161,11 +171,12 @@ function openDetail(pid){
         const list = Util.splitPhotos(l.photo);
         adminPhotoSets[l.id] = list;
         return list.map((u,idx)=>`<div class="admin-photo">
-          <img class="list-thumb" src="${Util.photoUrl(u)}" alt="写真" onclick="openPhotos('${l.id}',${idx})">
+          <img class="list-thumb" data-ph="${u}" alt="写真" onclick="openPhotos('${l.id}',${idx})">
           <button class="btn-edit" onclick="editLogPhoto('${l.id}',${idx})">✏ 描き込み</button>
         </div>`).join("");
       })()}</td>
     </tr>`).join("");
+  Util.hydratePhotos(document.getElementById("logRows"));
   document.getElementById("detailCard").scrollIntoView({behavior:"smooth"});
 }
 
@@ -219,7 +230,25 @@ document.getElementById("btnDaily").onclick = ()=>buildDoc("daily");
 document.getElementById("btnReport").onclick = ()=>buildDoc("report");
 
 function toast(m){const t=document.getElementById("toast");t.textContent=m;t.classList.add("show");setTimeout(()=>t.classList.remove("show"),2000);}
-init();
+
+/* ---- 社員ログインのゲート ---- */
+function showEmpLogin(){ document.getElementById("empLogin").style.display="block"; document.getElementById("adminMain").style.display="none"; }
+function showAdminMain(){ document.getElementById("empLogin").style.display="none"; document.getElementById("adminMain").style.display="block"; }
+async function start(){
+  if(Store.hasToken()){
+    showAdminMain();
+    try{ await init(); }
+    catch(e){ if(e.auth){ Store.logout(); showEmpLogin(); } else { toast("エラー: "+e.message); } }
+  } else { showEmpLogin(); }
+}
+document.getElementById("empLoginBtn").onclick = async ()=>{
+  const pw=document.getElementById("empPw").value;
+  document.getElementById("empErr").textContent="";
+  try{ await Store.loginEmployee(pw); showAdminMain(); await init(); }
+  catch(e){ document.getElementById("empErr").textContent = e.message; }
+};
+document.getElementById("empPw").addEventListener("keydown",e=>{ if(e.key==="Enter") document.getElementById("empLoginBtn").click(); });
+start();
 </script>
 </body>
 </html>

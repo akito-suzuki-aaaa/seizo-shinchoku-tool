@@ -1,26 +1,30 @@
 /* =============================================================
-   Code.gs  —  GAS バックエンド（本番モード用）
+   Code.gs  —  GAS バックエンド（セキュア版）
    -------------------------------------------------------------
-   使い方（README.md 参照）:
-   1. Google スプレッドシートを新規作成
-   2. 拡張機能 > Apps Script でこのコードを貼付
-   3. setup() を一度実行 → シートとサンプルデータを自動作成
-   4. デプロイ > 新しいデプロイ > 種類=ウェブアプリ
-        実行するユーザー: 自分 / アクセスできるユーザー: 全員
-   5. 発行された URL を store.js の GAS_URL に貼る
+   セキュリティ方針:
+   ・データはトークン認証必須（URLを知っていても、ログインしないと何も返さない）
+   ・顧客はサーバー側で「自分の案件だけ」に絞って返す（他社データは送らない）
+   ・写真は Drive で非公開（リンク共有しない）。認証API経由でのみ配信
+   ・パスワードはハッシュ化して保存（顧客はcustomersシート、社員は共通パスワード）
+   ・ログイン試行のレート制限あり
+
+   社員共通パスワードの変更:
+     Apps Scriptエディタで setEmployeePassword("新しいパスワード") を1回実行
+   既存写真の共有解除（初回のみ）:
+     employeeログイン後に画面から実行、または lockdownPhotos_manual() を実行
    ============================================================= */
 
 const SHEETS = {
-  customers: ["id", "company", "loginId", "password"],
+  customers: ["id", "company", "loginId", "passHash", "salt"],
   projects:  ["id", "name", "customerId", "customerName", "owner", "startDate", "dueDate", "status"],
   processes: ["id", "projectId", "name", "order", "targetQty"],
   logs:      ["id", "projectId", "processId", "datetime", "author", "progress", "status", "qty", "comment", "photo"],
 };
-
-// 写真を保存する Drive フォルダ名
 const PHOTO_FOLDER = "進捗管理_写真";
+const SESSION_TTL_MS = 12 * 3600 * 1000;      // トークン有効期間 12時間
+const DEFAULT_EMP_PASSWORD = "shain-2026";     // 社員共通パスワード初期値（必ず変更してください）
 
-/* ---------- 初期セットアップ（手動で1回実行） ---------- */
+/* ---------- 初期セットアップ（新規スプレッドシート） ---------- */
 function setup() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   for (const [name, headers] of Object.entries(SHEETS)) {
@@ -30,10 +34,10 @@ function setup() {
     sh.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight("bold");
     sh.setFrozenRows(1);
   }
-  // サンプルデータ
+  const c1 = makeSalt(), c2 = makeSalt();
   appendRows("customers", [
-    ["C001", "A社", "a-sha", "1234"],
-    ["C002", "B社", "b-sha", "1234"],
+    ["C001", "A社", "a-sha", hashPw("1234", c1), c1],
+    ["C002", "B社", "b-sha", hashPw("1234", c2), c2],
   ]);
   appendRows("projects", [
     ["P001", "架台フレーム 100台", "C001", "A社", "鈴木", "2026-08-04", "2026-08-20", "作業中"],
@@ -51,70 +55,161 @@ function setup() {
     ["L001", "P001", "W001", t, "鈴木", 100, "完了", 100, "材料切断100台分 完了。", ""],
     ["L002", "P001", "W002", t, "鈴木", 65, "作業中", 65, "溶接歪みなし。午後から仕上げ。", ""],
   ]);
+  setEmployeePasswordInternal(DEFAULT_EMP_PASSWORD);
+  PropertiesService.getScriptProperties().setProperty("schema", "2");
 }
 
-// シートが未作成なら初回だけ自動でセットアップする（2回目以降はフラグで即スキップ）
+/* ---------- 初回だけ実行される初期化・移行 ---------- */
 function ensureInitialized() {
   const props = PropertiesService.getScriptProperties();
-  if (props.getProperty("inited")) return;
-  if (!SpreadsheetApp.getActiveSpreadsheet().getSheetByName("logs")) setup();
-  props.setProperty("inited", "1");
+  if (props.getProperty("schema") === "2") return;
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  if (!ss.getSheetByName("logs")) { setup(); return; }
+  migrateCustomersToHash();                              // 既存の平文パスワードをハッシュ化
+  if (!props.getProperty("emp_hash")) setEmployeePasswordInternal(DEFAULT_EMP_PASSWORD);
+  props.setProperty("schema", "2");
 }
 
-// getBundle を短時間キャッシュ（連続アクセス時にシート読込を省く）
-function getBundleData() {
-  const cache = CacheService.getScriptCache();
-  const hit = cache.get("bundle");
-  if (hit) return JSON.parse(hit);
-  const data = { projects: readAll("projects"), processes: readAll("processes"), logs: readAll("logs") };
-  const s = JSON.stringify(data);
-  if (s.length < 95000) { try { cache.put("bundle", s, 40); } catch (e) {} } // 40秒・100KB上限
-  return data;
+// 既存 customers（id,company,loginId,password）を（…,passHash,salt）に変換
+function migrateCustomersToHash() {
+  const sh = sheet("customers");
+  const values = sh.getDataRange().getValues();
+  const headers = values[0].map(String);
+  if (headers.indexOf("passHash") >= 0) return;
+  const iId = headers.indexOf("id"), iCo = headers.indexOf("company"),
+        iLg = headers.indexOf("loginId"), iPw = headers.indexOf("password");
+  const out = [["id", "company", "loginId", "passHash", "salt"]];
+  for (let r = 1; r < values.length; r++) {
+    if (!values[r][iId]) continue;
+    const salt = makeSalt();
+    out.push([values[r][iId], values[r][iCo], values[r][iLg], hashPw(String(values[r][iPw]), salt), salt]);
+  }
+  sh.clear();
+  sh.getRange(1, 1, out.length, 5).setValues(out);
+  sh.getRange(1, 1, 1, 5).setFontWeight("bold");
+  sh.setFrozenRows(1);
 }
-function invalidateBundle() { try { CacheService.getScriptCache().remove("bundle"); } catch (e) {} }
 
 /* ---------- ルーティング ---------- */
 function doPost(e) {
   try {
     const req = JSON.parse(e.postData.contents);
-    const data = route(req.action, req);
-    return json({ ok: true, data });
+    return json({ ok: true, data: route(req.action, req) });
   } catch (err) {
-    return json({ ok: false, error: String(err.message || err) });
+    const msg = String(err && err.message || err);
+    return json({ ok: false, error: msg, auth: msg === "AUTH" });
   }
 }
-
-// 動作確認用（ブラウザで開くと OK が返る）
-function doGet() {
-  return json({ ok: true, data: "製造進捗管理API 稼働中" });
-}
+function doGet() { return json({ ok: true, data: "製造進捗管理API 稼働中" }); }
 
 function route(action, req) {
   ensureInitialized();
   switch (action) {
-    // 画面表示に必要なデータを1回でまとめて返す（round trip削減＋短時間キャッシュ）
-    case "getBundle":    return getBundleData();
-    case "getProjects":  return readAll("projects");
-    case "getProcesses": return readAll("processes").filter(p => p.projectId === req.projectId);
-    case "getLogs":      return readAll("logs").filter(l => l.projectId === req.projectId);
-    case "getAllLogs":   return readAll("logs");
-    case "addLog":       return addLog(req.log);
-    case "overwritePhoto": return overwritePhoto(req.logId, req.oldUrl, req.newDataUrl);
-    case "getPhotoData": return { dataUrl: getPhotoData(req.url) };
-    case "login":        return login(req.loginId, req.password);
+    case "login":          return login(req.loginId, req.password);
+    case "employeeLogin":  return employeeLogin(req.password);
+    case "getBundle":      return getBundleData(req.token);
+    case "getPhotoData":   return { dataUrl: getPhotoData(req.token, req.url) };
+    case "addLog":         return addLog(req.token, req.log);
+    case "overwritePhoto": return overwritePhoto(req.token, req.logId, req.oldUrl, req.newDataUrl);
+    case "lockdownPhotos": return lockdownPhotos(req.token);
     default: throw new Error("unknown action: " + action);
   }
 }
 
-/* ---------- 各処理 ---------- */
-function addLog(log) {
+/* ---------- パスワード・ハッシュ ---------- */
+function makeSalt() { return Utilities.getUuid().replace(/-/g, "").slice(0, 16); }
+function hashPw(pw, salt) {
+  const raw = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, salt + "|" + pw, Utilities.Charset.UTF_8);
+  return raw.map(b => ("0" + (b & 0xff).toString(16)).slice(-2)).join("");
+}
+function setEmployeePasswordInternal(pw) {
+  const salt = makeSalt();
+  const props = PropertiesService.getScriptProperties();
+  props.setProperty("emp_salt", salt);
+  props.setProperty("emp_hash", hashPw(pw, salt));
+}
+// エディタから手動実行して社員共通パスワードを変更する
+function setEmployeePassword(pw) { setEmployeePasswordInternal(pw); return "変更しました"; }
+
+/* ---------- レート制限（ログイン試行） ---------- */
+function rateLimit(key) {
+  const cache = CacheService.getScriptCache(), k = "rl:" + key;
+  const n = Number(cache.get(k) || "0") + 1;
+  cache.put(k, String(n), 600); // 10分間
+  if (n > 8) throw new Error("試行回数が多すぎます。しばらく待ってください");
+}
+
+/* ---------- セッション（トークン） ---------- */
+function createSession(role, refId) {
+  const token = Utilities.getUuid();
+  PropertiesService.getScriptProperties()
+    .setProperty("sess_" + token, JSON.stringify({ role, refId, exp: Date.now() + SESSION_TTL_MS }));
+  return token;
+}
+function getSession(token) {
+  if (!token) return null;
+  const props = PropertiesService.getScriptProperties();
+  const raw = props.getProperty("sess_" + token);
+  if (!raw) return null;
+  const s = JSON.parse(raw);
+  if (Date.now() > s.exp) { props.deleteProperty("sess_" + token); return null; }
+  return s;
+}
+function requireSession(token) { const s = getSession(token); if (!s) throw new Error("AUTH"); return s; }
+function requireEmployee(token) { const s = requireSession(token); if (s.role !== "employee") throw new Error("権限がありません"); return s; }
+
+/* ---------- ログイン ---------- */
+function login(loginId, password) {
+  rateLimit("cust:" + loginId);
+  const c = readAll("customers").find(x => String(x.loginId) === String(loginId));
+  if (!c || hashPw(String(password), c.salt) !== String(c.passHash)) throw new Error("IDまたはパスワードが違います");
+  return { token: createSession("customer", c.id), id: c.id, company: c.company, role: "customer" };
+}
+function employeeLogin(password) {
+  rateLimit("emp");
+  const props = PropertiesService.getScriptProperties();
+  const salt = props.getProperty("emp_salt"), hash = props.getProperty("emp_hash");
+  if (!salt || hashPw(String(password), salt) !== hash) throw new Error("パスワードが違います");
+  return { token: createSession("employee", "emp"), role: "employee" };
+}
+
+/* ---------- データ取得（トークン必須・顧客は自分の分だけ） ---------- */
+function getBundleData(token) {
+  const s = requireSession(token);
+  const ver = bundleVer();
+  const key = "bundle_" + (s.role === "customer" ? s.refId : "emp") + "_" + ver;
+  const cache = CacheService.getScriptCache();
+  const hit = cache.get(key);
+  if (hit) return JSON.parse(hit);
+
+  let projects = readAll("projects"), processes = readAll("processes"), logs = readAll("logs");
+  if (s.role === "customer") {
+    const mine = {};
+    projects = projects.filter(p => p.customerId === s.refId);
+    projects.forEach(p => mine[p.id] = 1);
+    processes = processes.filter(p => mine[p.projectId]);
+    logs = logs.filter(l => mine[l.projectId]);
+  }
+  const data = { projects, processes, logs, role: s.role };
+  const str = JSON.stringify(data);
+  if (str.length < 95000) { try { cache.put(key, str, 40); } catch (e) {} }
+  return data;
+}
+function bundleVer() { return PropertiesService.getScriptProperties().getProperty("bundleVer") || "0"; }
+function invalidateBundle() {
+  const p = PropertiesService.getScriptProperties();
+  p.setProperty("bundleVer", String(Number(bundleVer()) + 1));
+}
+
+/* ---------- 記録の追加（社員のみ） ---------- */
+function addLog(token, log) {
+  requireEmployee(token);
   const id = "L" + Date.now();
-  // 複数枚対応：dataURLはDriveへ保存、それ以外(既存URL)はそのまま。改行区切りで1セルに。
   const photos = log.photos || (log.photo ? [log.photo] : []);
-  const urls = photos.map((p, i) =>
-    (String(p).indexOf("data:image") === 0) ? savePhoto(p, id + "_" + i, log.projectId) : p
+  const ids = photos.map((p, i) =>
+    (String(p).indexOf("data:image") === 0) ? savePhoto(p, id + "_" + i, log.projectId) : extractDriveId(p)
   ).filter(Boolean);
-  const photoCell = urls.join("\n");
+  const photoCell = ids.join("\n");
   appendRows("logs", [[
     id, log.projectId, log.processId, log.datetime, log.author,
     log.progress, log.status, log.qty, log.comment, photoCell,
@@ -124,101 +219,96 @@ function addLog(log) {
   return Object.assign({}, log, { id, photo: photoCell });
 }
 
-// 既存写真を注釈付き画像で「同じファイルのまま」上書きする。
-// 新しいファイルを作らないので、元データがドライブに残らず、URLも変わらない。
-function overwritePhoto(logId, oldUrl, newDataUrl) {
-  const oldId = extractDriveId(oldUrl);
+/* ---------- 写真の上書き（社員のみ・同一ファイルを直接差し替え） ---------- */
+function overwritePhoto(token, logId, oldRef, newDataUrl) {
+  requireEmployee(token);
+  const oldId = extractDriveId(oldRef);
   const m = String(newDataUrl).match(/^data:(image\/\w+);base64,(.+)$/);
   if (!oldId || !m) throw new Error("画像データが不正です");
   const blob = Utilities.newBlob(Utilities.base64Decode(m[2]), m[1], oldId + ".jpg");
-  // Advanced Drive Service で既存ファイルの中身を差し替え（メタデータは変更しない）
   Drive.Files.update({}, oldId, blob);
   invalidateBundle();
-  // セルのURLは変わらないので、現状のセルをそのまま返す
-  return { photo: currentPhotoCell(logId), newUrl: oldUrl, sameFile: true };
+  return { photo: currentPhotoCell(logId), newUrl: oldId, sameFile: true };
 }
-
 function currentPhotoCell(logId) {
-  const sh = sheet("logs");
-  const rows = sh.getDataRange().getValues();
+  const sh = sheet("logs"), rows = sh.getDataRange().getValues();
   const H = SHEETS.logs, iId = H.indexOf("id"), iPhoto = H.indexOf("photo");
   for (let r = 1; r < rows.length; r++) if (rows[r][iId] === logId) return String(rows[r][iPhoto]);
   return "";
 }
 
-// 編集用に画像をdataURLで返す（CanvasのCORS汚染回避）
-function getPhotoData(url) {
-  const id = extractDriveId(url);
+/* ---------- 写真の配信（認証API・顧客は自分の分だけ） ---------- */
+function getPhotoData(token, ref) {
+  const s = requireSession(token);
+  const id = extractDriveId(ref);
+  if (!id) throw new Error("画像が見つかりません");
+  if (s.role === "customer" && !customerOwnsPhoto(s.refId, id)) throw new Error("権限がありません");
   const blob = DriveApp.getFileById(id).getBlob();
   return "data:" + blob.getContentType() + ";base64," + Utilities.base64Encode(blob.getBytes());
 }
-
-function extractDriveId(u) { const m = String(u).match(/[-\w]{25,}/); return m ? m[0] : ""; }
-function trashFile(id) { try { DriveApp.getFileById(id).setTrashed(true); } catch (e) {} }
-
-function login(loginId, password) {
-  const c = readAll("customers").find(x => String(x.loginId) === String(loginId) && String(x.password) === String(password));
-  if (!c) throw new Error("IDまたはパスワードが違います");
-  return { id: c.id, company: c.company };
+function customerOwnsPhoto(customerId, fileId) {
+  const mine = {};
+  readAll("projects").forEach(p => { if (p.customerId === customerId) mine[p.id] = 1; });
+  return readAll("logs").some(l => mine[l.projectId] && String(l.photo).indexOf(fileId) >= 0);
 }
 
-function updateProjectStatus(projectId, status) {
-  const sh = sheet("projects");
-  const rows = sh.getDataRange().getValues();
-  const idxId = SHEETS.projects.indexOf("id");
-  const idxStatus = SHEETS.projects.indexOf("status");
-  for (let r = 1; r < rows.length; r++) {
-    if (rows[r][idxId] === projectId) {
-      sh.getRange(r + 1, idxStatus + 1).setValue(status);
-      return;
-    }
-  }
-}
-
-/* ---------- Drive に写真を保存（案件ごとのサブフォルダに振り分け） ---------- */
+/* ---------- Drive 保存（非公開・共有しない） ---------- */
 function savePhoto(dataUrl, id, projectId) {
   const m = dataUrl.match(/^data:(image\/\w+);base64,(.+)$/);
   if (!m) return "";
   const blob = Utilities.newBlob(Utilities.base64Decode(m[2]), m[1], id + ".jpg");
-  const folder = projectFolder(projectId);
-  const file = folder.createFile(blob);
-  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-  // <img>で表示できる形式（uc?export=view は仕様変更で表示不可のため thumbnail を使う）
-  return "https://drive.google.com/thumbnail?id=" + file.getId() + "&sz=w1200";
+  const file = projectFolder(projectId).createFile(blob);
+  // 共有しない（リンクを知っていてもアクセス不可）。IDだけ保存し、配信は認証API経由。
+  return file.getId();
 }
-// 「進捗管理_写真 / 顧客名_案件名 /」の階層を用意して返す
 function projectFolder(projectId) {
   const root = getFolder(PHOTO_FOLDER);
   const prj = projectId ? readAll("projects").find(p => p.id === projectId) : null;
   const name = prj ? sanitizeName(prj.customerName + "_" + prj.name) : "その他";
   return getSubFolder(root, name);
 }
-function getFolder(name) {
-  const it = DriveApp.getFoldersByName(name);
-  return it.hasNext() ? it.next() : DriveApp.createFolder(name);
-}
-function getSubFolder(parent, name) {
-  const it = parent.getFoldersByName(name);
-  return it.hasNext() ? it.next() : parent.createFolder(name);
-}
+function getFolder(name) { const it = DriveApp.getFoldersByName(name); return it.hasNext() ? it.next() : DriveApp.createFolder(name); }
+function getSubFolder(parent, name) { const it = parent.getFoldersByName(name); return it.hasNext() ? it.next() : parent.createFolder(name); }
 function sanitizeName(s) { return String(s).replace(/[\\/:*?"<>|]/g, "_").slice(0, 80); }
 
-/* ---------- スプレッドシート ユーティリティ ---------- */
+/* ---------- 既存写真の共有解除（リンク共有をやめる） ---------- */
+function lockdownPhotos(token) {
+  requireEmployee(token);
+  return lockdownPhotosCore();
+}
+function lockdownPhotos_manual() { return lockdownPhotosCore(); } // エディタから手動実行用
+function lockdownPhotosCore() {
+  let n = 0;
+  const it = DriveApp.getFoldersByName(PHOTO_FOLDER);
+  if (!it.hasNext()) return { locked: 0 };
+  const root = it.next();
+  n += unshareFiles(root.getFiles());
+  const subs = root.getFolders();
+  while (subs.hasNext()) n += unshareFiles(subs.next().getFiles());
+  return { locked: n };
+}
+function unshareFiles(files) {
+  let n = 0;
+  while (files.hasNext()) {
+    try { files.next().setSharing(DriveApp.Access.PRIVATE, DriveApp.Permission.NONE); n++; } catch (e) {}
+  }
+  return n;
+}
+
+/* ---------- 共通ユーティリティ ---------- */
+function updateProjectStatus(projectId, status) {
+  const sh = sheet("projects"), rows = sh.getDataRange().getValues();
+  const idxId = SHEETS.projects.indexOf("id"), idxStatus = SHEETS.projects.indexOf("status");
+  for (let r = 1; r < rows.length; r++) if (rows[r][idxId] === projectId) { sh.getRange(r + 1, idxStatus + 1).setValue(status); return; }
+}
+function extractDriveId(u) { const m = String(u).match(/[-\w]{25,}/); return m ? m[0] : ""; }
 function sheet(name) { return SpreadsheetApp.getActiveSpreadsheet().getSheetByName(name); }
 function readAll(name) {
-  const sh = sheet(name);
-  const values = sh.getDataRange().getValues();
-  const headers = values.shift();
-  return values.filter(r => r[0] !== "").map(row => {
-    const o = {};
-    headers.forEach((h, i) => o[h] = row[i]);
-    return o;
-  });
+  const sh = sheet(name), values = sh.getDataRange().getValues(), headers = values.shift();
+  return values.filter(r => r[0] !== "").map(row => { const o = {}; headers.forEach((h, i) => o[h] = row[i]); return o; });
 }
 function appendRows(name, rows) {
   const sh = sheet(name);
   if (rows.length) sh.getRange(sh.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
 }
-function json(obj) {
-  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
-}
+function json(obj) { return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON); }

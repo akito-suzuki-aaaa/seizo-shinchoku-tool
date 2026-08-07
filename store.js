@@ -63,15 +63,22 @@ const Store = (() => {
   }
   function save(db) { localStorage.setItem(LS_KEY, JSON.stringify(db)); }
 
-  /* ---------- GAS 呼び出し（本番モード） ---------- */
+  /* ---------- 認証トークン（ログイン状態） ---------- */
+  const TOKEN_KEY = "mfg_token";
+  function getToken() { try { return sessionStorage.getItem(TOKEN_KEY) || ""; } catch (e) { return ""; } }
+  function setToken(t) { try { sessionStorage.setItem(TOKEN_KEY, t); } catch (e) {} }
+  function clearToken() { try { sessionStorage.removeItem(TOKEN_KEY); } catch (e) {} }
+  const _photoCache = {};   // fileId -> dataURL
+
+  /* ---------- GAS 呼び出し（本番モード・トークン付き） ---------- */
   async function gas(action, payload) {
     const res = await fetch(GAS_URL, {
       method: "POST",
       headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({ action, ...payload }),
+      body: JSON.stringify({ action, token: getToken(), ...payload }),
     });
     const json = await res.json();
-    if (!json.ok) throw new Error(json.error || "APIエラー");
+    if (!json.ok) { const e = new Error(json.error || "APIエラー"); if (json.auth) e.auth = true; throw e; }
     return json.data;
   }
 
@@ -189,25 +196,57 @@ const Store = (() => {
       }
       const res = await gas("overwritePhoto", { logId, oldUrl, newDataUrl });
       const id = (String(oldUrl).match(/[-\w]{25,}/) || [])[0];
-      if (id) Util._override[id] = newDataUrl; // 直後は手元の描き込み画像で表示
+      if (id) { Util._override[id] = newDataUrl; _photoCache[id] = newDataUrl; } // 直後は手元の描き込み画像で表示
       if (_bundle) { const l = _bundle.logs.find(x => x.id === logId); if (l) l.photo = res.photo; writeBundleCache(_bundle); }
       return res;
     },
 
-    // 既存写真を編集用に取得（CORSで汚染されないよう dataURL で受け取る）
+    // 既存写真を編集用に取得（認証API経由・dataURL）
     async getPhotoData(url) {
-      if (isDemo()) return url; // デモはそのまま dataURL
-      const res = await gas("getPhotoData", { url });
+      if (isDemo()) return url;
+      const id = (String(url).match(/[-\w]{25,}/) || [])[0];
+      if (id && Util._override[id]) return Util._override[id];
+      if (id && _photoCache[id]) return _photoCache[id];
+      const res = await gas("getPhotoData", { url: id || url });
+      if (id) _photoCache[id] = res.dataUrl;
       return res.dataUrl;
     },
 
+    // 顧客ログイン（トークン取得）
     async login(loginId, password) {
       if (isDemo()) {
         const c = load().customers.find(x => x.loginId === loginId && x.password === password);
         if (!c) throw new Error("IDまたはパスワードが違います");
-        return { id: c.id, company: c.company };
+        return { id: c.id, company: c.company, role: "customer" };
       }
-      return gas("login", { loginId, password });
+      const r = await gas("login", { loginId, password });
+      setToken(r.token); _bundle = null; try { localStorage.removeItem(BUNDLE_CACHE); } catch (e) {}
+      return r;
+    },
+
+    // 社員ログイン（共通パスワード）
+    async loginEmployee(password) {
+      if (isDemo()) { setToken("demo-emp"); return { role: "employee" }; }
+      const r = await gas("employeeLogin", { password });
+      setToken(r.token); _bundle = null; try { localStorage.removeItem(BUNDLE_CACHE); } catch (e) {}
+      return r;
+    },
+
+    logout() { clearToken(); _bundle = null; try { localStorage.removeItem(BUNDLE_CACHE); } catch (e) {} },
+    hasToken() { return isDemo() ? true : !!getToken(); },
+
+    // 写真を認証API経由で取得（fileId → dataURL）。メモリにキャッシュ。
+    async getPhoto(ref) {
+      if (!ref) return "";
+      const s = String(ref);
+      if (isDemo() || s.indexOf("data:") === 0) return s;
+      const id = (s.match(/[-\w]{25,}/) || [])[0];
+      if (!id) return "";
+      if (Util._override[id]) return Util._override[id];
+      if (_photoCache[id]) return _photoCache[id];
+      const res = await gas("getPhotoData", { url: id });
+      _photoCache[id] = res.dataUrl;
+      return res.dataUrl;
     },
 
     // デモデータを初期状態に戻す（動作確認用）
@@ -245,19 +284,34 @@ const Util = {
     return String(raw).split(/\n+/).map(s => s.trim()).filter(Boolean);
   },
 
-  // 写真をポップアップで大きく表示。単一URLでも、配列＋開始位置でも可（配列なら前後めくり）。
+  // <img data-ph="fileId"> を認証API経由の画像で埋める（描画後に呼ぶ）
+  hydratePhotos(root) {
+    const scope = root || document;
+    scope.querySelectorAll("img[data-ph]").forEach(img => {
+      if (img.dataset.phLoaded) return;
+      img.dataset.phLoaded = "1";
+      Store.getPhoto(img.getAttribute("data-ph")).then(d => { if (d) img.src = d; }).catch(() => {});
+    });
+  },
+
+  // 写真をポップアップで大きく表示。配列＋開始位置なら前後めくり。画像は認証API経由で読み込む。
   openImage(src, index) {
-    const list = Array.isArray(src) ? src.map(Util.photoUrl) : [Util.photoUrl(src)];
+    const list = Array.isArray(src) ? src.slice() : [src];
     let i = index || 0;
     const ov = document.createElement("div");
     ov.className = "lightbox";
     ov.innerHTML = `
       <button class="lightbox-close" aria-label="閉じる">×</button>
       ${list.length > 1 ? '<button class="lightbox-nav lightbox-prev" aria-label="前へ">‹</button><button class="lightbox-nav lightbox-next" aria-label="次へ">›</button><div class="lightbox-count"></div>' : ''}
-      <img src="${list[i]}" alt="写真">`;
+      <img alt="写真">`;
     const imgEl = ov.querySelector("img");
     const countEl = ov.querySelector(".lightbox-count");
-    const show = () => { imgEl.src = list[i]; if (countEl) countEl.textContent = `${i + 1} / ${list.length}`; };
+    const show = async () => {
+      if (countEl) countEl.textContent = `${i + 1} / ${list.length}`;
+      const my = i;
+      const d = await Store.getPhoto(list[i]);
+      if (my === i) imgEl.src = d;
+    };
     const go = (d, e) => { e && e.stopPropagation(); i = (i + d + list.length) % list.length; show(); };
     const close = () => { ov.remove(); document.removeEventListener("keydown", onKey); };
     const onKey = (e) => { if (e.key === "Escape") close(); else if (e.key === "ArrowLeft") go(-1); else if (e.key === "ArrowRight") go(1); };

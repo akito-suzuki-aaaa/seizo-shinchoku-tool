@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <title>進捗を記録 — 社員用</title>
-<link rel="stylesheet" href="styles.css?v=9">
+<link rel="stylesheet" href="styles.css?v=10">
 </head>
 <body>
 <div class="topbar">
@@ -15,7 +15,17 @@
   <span id="mode" class="demo-tag">デモ</span>
 </div>
 
-<div class="wrap-narrow">
+<div class="wrap-narrow" id="empLogin" style="display:none">
+  <div class="card" style="margin-top:24px">
+    <h2 style="font-size:15px;margin:0 0 12px">社員ログイン</h2>
+    <label for="empPw">社員パスワード</label>
+    <input type="password" id="empPw" autocomplete="current-password">
+    <div style="margin-top:16px"><button class="btn btn-primary" id="empLoginBtn">ログイン</button></div>
+    <p class="hint" id="empErr" style="color:var(--danger); min-height:18px; margin-top:8px"></p>
+  </div>
+</div>
+
+<div class="wrap-narrow" id="empMain" style="display:none">
   <div class="card">
     <label for="project">案件</label>
     <select id="project"></select>
@@ -70,8 +80,8 @@
 
 <div class="toast" id="toast"></div>
 
-<script src="store.js?v=9"></script>
-<script src="annotate.js?v=9"></script>
+<script src="store.js?v=10"></script>
+<script src="annotate.js?v=10"></script>
 <script>
 let photos = [];
 
@@ -156,7 +166,24 @@ function toast(msg){
   setTimeout(()=>t.classList.remove("show"), 2200);
 }
 
-init();
+/* ---- 社員ログインのゲート ---- */
+function showEmpLogin(){ document.getElementById("empLogin").style.display="block"; document.getElementById("empMain").style.display="none"; }
+function showEmpMain(){ document.getElementById("empLogin").style.display="none"; document.getElementById("empMain").style.display="block"; }
+async function start(){
+  if(Store.hasToken()){
+    showEmpMain();
+    try{ await init(); }
+    catch(e){ if(e.auth){ Store.logout(); showEmpLogin(); } else { toast("エラー: "+e.message); } }
+  } else { showEmpLogin(); }
+}
+document.getElementById("empLoginBtn").onclick = async ()=>{
+  const pw=document.getElementById("empPw").value;
+  document.getElementById("empErr").textContent="";
+  try{ await Store.loginEmployee(pw); showEmpMain(); await init(); }
+  catch(e){ document.getElementById("empErr").textContent = e.message; }
+};
+document.getElementById("empPw").addEventListener("keydown",e=>{ if(e.key==="Enter") document.getElementById("empLoginBtn").click(); });
+start();
 </script>
 </body>
 </html>

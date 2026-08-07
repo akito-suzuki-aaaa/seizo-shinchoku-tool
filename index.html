@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>製造進捗管理ツール</title>
-<link rel="stylesheet" href="styles.css?v=9">
+<link rel="stylesheet" href="styles.css?v=10">
 </head>
 <body>
 <div class="topbar">
@@ -40,13 +40,15 @@
   </div>
 
   <div class="card" style="margin-top:24px">
-    <h2>デモの使い方</h2>
+    <h2>ログイン情報</h2>
     <ol style="font-size:14px; padding-left:20px; margin:0">
-      <li>「社員用」で案件を選び、進捗率や写真を入れて<b>送信</b>。</li>
-      <li>「社内管理」で案件をクリックすると履歴が見え、<b>日報・報告書</b>を生成できます。</li>
-      <li>「お客様用」で <b>a-sha / 1234</b> でログインすると、A社の案件だけ時系列で見られます。</li>
+      <li><b>社員用・社内管理</b>：社員共通パスワード（初期値 <b>shain-2026</b>／変更推奨）でログイン。</li>
+      <li><b>お客様用</b>：顧客ごとのID・パスワード（デモ顧客 <b>a-sha / 1234</b>）。自社の案件だけ表示されます。</li>
     </ol>
-    <p style="margin-top:14px">
+    <p class="hint" style="margin-top:12px">
+      認証なしでは何も表示されません。写真も非公開で、ログインした本人だけが見られます。
+    </p>
+    <p style="margin-top:10px">
       <button class="btn btn-sm" id="reset">デモデータを初期化</button>
     </p>
   </div>
@@ -54,7 +56,7 @@
 
 <div class="toast" id="toast"></div>
 
-<script src="store.js?v=9"></script>
+<script src="store.js?v=10"></script>
 <script>
 if(!Store.isDemo()) document.getElementById("mode").style.display="none";
 document.getElementById("reset").onclick = ()=>{

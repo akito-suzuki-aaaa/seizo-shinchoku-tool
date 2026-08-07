@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>進捗確認 — お客様用</title>
-<link rel="stylesheet" href="styles.css?v=9">
+<link rel="stylesheet" href="styles.css?v=10">
 </head>
 <body>
 <div class="topbar">
@@ -62,7 +62,7 @@
   <p class="hint" style="text-align:center"><a href="index.html">← 入口にもどる</a></p>
 </div>
 
-<script src="store.js?v=9"></script>
+<script src="store.js?v=10"></script>
 <script>
 // 顧客端末には他社ぶんを含むデータを保存しない（メモリ内キャッシュのみ）
 Store.disableDiskCache();
@@ -102,21 +102,32 @@ document.getElementById("logoutBtn").onclick = ()=>{
   location.reload();
 };
 
+function backToLogin(){
+  Store.logout();
+  document.getElementById("dataView").style.display="none";
+  document.getElementById("logoutBtn").style.display="none";
+  document.getElementById("loginView").style.display="block";
+}
+
 async function showData(){
   document.getElementById("loginView").style.display="none";
   document.getElementById("dataView").style.display="block";
   document.getElementById("logoutBtn").style.display="inline-flex";
   document.getElementById("sub").textContent = me.company + " 様";
   document.getElementById("companyName").textContent = me.company + " の案件";
-
-  const all = await Store.getProjects();
-  myProjects = all.filter(p=>p.customerId===me.id);
-
-  for(const p of myProjects){
-    const procs = await Store.getProcesses(p.id);
-    procs.forEach(w=> processMap[w.id]=w.name);
+  try{
+    const all = await Store.getProjects();
+    myProjects = all.filter(p=>p.customerId===me.id);
+    for(const p of myProjects){
+      const procs = await Store.getProcesses(p.id);
+      procs.forEach(w=> processMap[w.id]=w.name);
+    }
+    renderList();
+  }catch(e){
+    // トークン切れ等はログイン画面へ戻す
+    document.getElementById("loginErr").textContent = e.auth ? "再度ログインしてください" : e.message;
+    backToLogin();
   }
-  renderList();
 }
 
 function statusBadge(s){
@@ -164,13 +175,14 @@ async function openDetail(pid){
     const list = Util.splitPhotos(l.photo);
     photoSets[l.id] = list;
     const gal = list.length ? `<div class="gallery">${list.map((u,idx)=>
-      `<img class="tl-photo" src="${Util.photoUrl(u)}" alt="現場写真" onclick="openPhotos('${l.id}',${idx})">`).join("")}</div>` : "";
+      `<img class="tl-photo" data-ph="${u}" alt="現場写真" onclick="openPhotos('${l.id}',${idx})">`).join("")}</div>` : "";
     return `<div class="tl-item">
       <div class="tl-meta">${Util.fmtDate(l.datetime)} ・ ${processMap[l.processId]||""} ・ ${l.status}</div>
       <div class="tl-text">${l.comment||""}</div>
       ${gal}
     </div>`;
   }).join("") || '<p class="empty">まだ記録がありません</p>';
+  Util.hydratePhotos(document.getElementById("timeline"));
   window.scrollTo({top:0, behavior:"smooth"});
 }
 
@@ -179,10 +191,10 @@ document.getElementById("backBtn").onclick = ()=>{
   document.getElementById("listView").style.display="block";
 };
 
-/* セッションが残っていれば自動ログイン */
+/* セッション（トークン）が残っていれば自動ログイン */
 (function restore(){
   const saved = sessionStorage.getItem("mfg_customer");
-  if(saved){ me = JSON.parse(saved); showData(); }
+  if(saved && Store.hasToken()){ me = JSON.parse(saved); showData(); }
 })();
 </script>
 </body>
