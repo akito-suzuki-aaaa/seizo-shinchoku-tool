@@ -157,6 +157,8 @@ const Store = (() => {
         return { ok: true };
       }
       const res = await gas("overwritePhoto", { logId, oldUrl, newDataUrl });
+      const id = (String(oldUrl).match(/[-\w]{25,}/) || [])[0];
+      if (id) Util._override[id] = newDataUrl; // 直後は手元の描き込み画像で表示
       if (_bundle) { const l = _bundle.logs.find(x => x.id === logId); if (l) l.photo = res.photo; }
       return res;
     },
@@ -196,12 +198,15 @@ const Util = {
   // 写真URLを表示可能な形式に整える。
   // デモのdataURLはそのまま。ドライブのURL(uc?export=view 等)はファイルIDを取り出して
   // thumbnail形式に変換する（uc形式は<img>表示不可のため）。
+  _override: {},   // 上書き直後、サムネ再生成を待たずに手元画像を表示するための一時差し替え
   photoUrl(raw) {
     if (!raw) return "";
     const s = String(raw);
     if (s.indexOf("data:") === 0) return s;
     const m = s.match(/[-\w]{25,}/);
-    return m ? `https://drive.google.com/thumbnail?id=${m[0]}&sz=w1200` : s;
+    if (!m) return s;
+    if (Util._override[m[0]]) return Util._override[m[0]];
+    return `https://drive.google.com/thumbnail?id=${m[0]}&sz=w1200`;
   },
   // 保存された写真セル（改行区切り）を配列に分解
   splitPhotos(raw) {

@@ -109,25 +109,25 @@ function addLog(log) {
   return Object.assign({}, log, { id, photo: photoCell });
 }
 
-// 既存写真の1枚を、注釈付き画像で上書き（元ファイルはゴミ箱へ、行のURLを差し替え）
+// 既存写真を注釈付き画像で「同じファイルのまま」上書きする。
+// 新しいファイルを作らないので、元データがドライブに残らず、URLも変わらない。
 function overwritePhoto(logId, oldUrl, newDataUrl) {
+  const oldId = extractDriveId(oldUrl);
+  const m = String(newDataUrl).match(/^data:(image\/\w+);base64,(.+)$/);
+  if (!oldId || !m) throw new Error("画像データが不正です");
+  const blob = Utilities.newBlob(Utilities.base64Decode(m[2]), m[1], oldId + ".jpg");
+  // Advanced Drive Service で既存ファイルの中身を差し替え（メタデータは変更しない）
+  Drive.Files.update({}, oldId, blob);
+  // セルのURLは変わらないので、現状のセルをそのまま返す
+  return { photo: currentPhotoCell(logId), newUrl: oldUrl, sameFile: true };
+}
+
+function currentPhotoCell(logId) {
   const sh = sheet("logs");
   const rows = sh.getDataRange().getValues();
-  const H = SHEETS.logs;
-  const iId = H.indexOf("id"), iPhoto = H.indexOf("photo"), iProj = H.indexOf("projectId");
-  for (let r = 1; r < rows.length; r++) {
-    if (rows[r][iId] === logId) {
-      const list = String(rows[r][iPhoto]).split("\n").map(s => s.trim()).filter(Boolean);
-      const newUrl = savePhoto(newDataUrl, logId + "_" + Date.now(), rows[r][iProj]);
-      const oldId = extractDriveId(oldUrl);
-      const idx = list.findIndex(u => extractDriveId(u) === oldId);
-      if (idx >= 0) { trashFile(oldId); list[idx] = newUrl; } else { list.push(newUrl); }
-      const cell = list.join("\n");
-      sh.getRange(r + 1, iPhoto + 1).setValue(cell);
-      return { photo: cell, newUrl: newUrl };
-    }
-  }
-  throw new Error("log not found: " + logId);
+  const H = SHEETS.logs, iId = H.indexOf("id"), iPhoto = H.indexOf("photo");
+  for (let r = 1; r < rows.length; r++) if (rows[r][iId] === logId) return String(rows[r][iPhoto]);
+  return "";
 }
 
 // 編集用に画像をdataURLで返す（CanvasのCORS汚染回避）
