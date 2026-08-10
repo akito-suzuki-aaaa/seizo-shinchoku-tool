@@ -96,14 +96,14 @@ tr.clickable:hover td{background:#f7f8fa}
 .list-thumb:hover{filter:brightness(.93)}
 
 /* 社内管理：写真＋描き込みボタン */
-.admin-photo{display:inline-block; text-align:center; margin:3px; vertical-align:top}
-.admin-photo .list-thumb{width:88px; height:88px; display:block}
-.btn-edit{margin-top:4px; width:88px; font-size:11px; padding:4px 0; border:1px solid var(--line); background:#fff; border-radius:6px; cursor:pointer; font-family:inherit; color:var(--text)}
+.admin-photo{display:inline-block; text-align:center; margin:4px; vertical-align:top}
+.admin-photo .list-thumb{width:160px; height:160px; display:block}
+.btn-edit{margin-top:4px; width:160px; font-size:12px; padding:5px 0; border:1px solid var(--line); background:#fff; border-radius:6px; cursor:pointer; font-family:inherit; color:var(--text)}
 .btn-edit:hover{background:#eef4ff; border-color:var(--accent); color:var(--accent)}
 
-/* 写真ギャラリー（複数枚） */
-.gallery{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px}
-.gallery .tl-photo{width:200px; height:150px}
+/* 写真ギャラリー（複数枚）— クリックしなくても見えるよう大きく表示 */
+.gallery{display:flex; flex-direction:column; gap:12px; margin-top:10px}
+.gallery .tl-photo{width:100%; max-width:560px; height:auto; max-height:74vh; object-fit:contain; background:#f1efe8}
 .g-item{position:relative}
 .g-del{position:absolute; top:4px; right:4px; width:24px; height:24px; border-radius:50%; border:none; background:rgba(0,0,0,.6); color:#fff; font-size:15px; line-height:1; cursor:pointer}
 .g-edit{position:absolute; bottom:5px; right:5px; background:rgba(0,0,0,.62); color:#fff; border:none; border-radius:6px; font-size:12px; padding:3px 8px; cursor:pointer}
