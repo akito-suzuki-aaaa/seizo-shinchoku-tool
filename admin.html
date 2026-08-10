@@ -4,19 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>社内管理 — 進捗データベース</title>
-<link rel="stylesheet" href="styles.css?v=10">
+<link rel="stylesheet" href="styles.css?v=11">
 </head>
 <body>
-<div class="topbar">
-  <div>
-    <h1>社内管理・進捗データベース</h1>
-    <div class="sub">全案件の状況／日報・報告書</div>
-  </div>
-  <span id="mode" class="demo-tag">デモ</span>
-</div>
-
-<div class="wrap-narrow" id="empLogin" style="display:none">
-  <div class="card" style="margin-top:24px">
+<div class="login-screen" id="empLogin" style="display:none">
+  <div class="card" style="margin-top:60px">
     <h2>社員ログイン</h2>
     <label for="empPw">社員パスワード</label>
     <input type="password" id="empPw" autocomplete="current-password">
@@ -25,7 +17,29 @@
   </div>
 </div>
 
-<div class="wrap" id="adminMain" style="display:none">
+<div class="app" id="adminMain" style="display:none">
+  <aside class="sidebar" id="sidebar">
+    <div class="brand"><span class="brand-ic">🏭</span><div>製造進捗<small>社内管理</small></div></div>
+    <nav>
+      <a class="nav-item active" href="admin.html"><span class="ni-ic">📊</span>案件ダッシュボード</a>
+      <a class="nav-item" href="index.html"><span class="ni-ic">🏠</span>入口</a>
+    </nav>
+    <div class="side-foot">
+      <button class="nav-item" id="logoutBtn"><span class="ni-ic">⎋</span>ログアウト</button>
+    </div>
+  </aside>
+  <div class="backdrop" id="backdrop"></div>
+  <div class="content">
+    <div class="appbar">
+      <button class="hamburger" id="hamburger" aria-label="メニュー">☰</button>
+      <div>
+        <div class="appbar-title">社内管理・進捗データベース</div>
+        <div class="appbar-sub">全案件の状況／日報・報告書</div>
+      </div>
+      <div class="appbar-spacer"></div>
+      <span id="mode" class="demo-tag" style="display:none">デモ</span>
+    </div>
+    <div class="content-body">
   <div class="metrics">
     <div class="metric"><div class="k">進行中の案件</div><div class="v" id="mActive">–</div></div>
     <div class="metric"><div class="k">今日の記録</div><div class="v" id="mToday">–</div></div>
@@ -57,13 +71,14 @@
     </table>
   </div>
 
-  <p class="hint" style="text-align:center"><a href="index.html">← 入口にもどる</a></p>
-</div>
+    </div><!-- content-body -->
+  </div><!-- content -->
+</div><!-- app -->
 
 <div class="toast" id="toast"></div>
 
-<script src="store.js?v=10"></script>
-<script src="annotate.js?v=10"></script>
+<script src="store.js?v=11"></script>
+<script src="annotate.js?v=11"></script>
 <script>
 let projects=[], allLogs=[], processMap={}, currentProjectId=null, adminPhotoSets={};
 
@@ -231,9 +246,19 @@ document.getElementById("btnReport").onclick = ()=>buildDoc("report");
 
 function toast(m){const t=document.getElementById("toast");t.textContent=m;t.classList.add("show");setTimeout(()=>t.classList.remove("show"),2000);}
 
+/* ---- サイドメニュー開閉（スマホ） ---- */
+function toggleSidebar(open){
+  const sb=document.getElementById("sidebar"), bd=document.getElementById("backdrop");
+  const show = open===undefined ? !sb.classList.contains("open") : open;
+  sb.classList.toggle("open", show); bd.classList.toggle("show", show);
+}
+document.getElementById("hamburger").onclick = ()=> toggleSidebar();
+document.getElementById("backdrop").onclick = ()=> toggleSidebar(false);
+document.getElementById("logoutBtn").onclick = ()=>{ Store.logout(); location.reload(); };
+
 /* ---- 社員ログインのゲート ---- */
 function showEmpLogin(){ document.getElementById("empLogin").style.display="block"; document.getElementById("adminMain").style.display="none"; }
-function showAdminMain(){ document.getElementById("empLogin").style.display="none"; document.getElementById("adminMain").style.display="block"; }
+function showAdminMain(){ document.getElementById("empLogin").style.display="none"; document.getElementById("adminMain").style.display=""; }
 async function start(){
   if(Store.hasToken()){
     showAdminMain();

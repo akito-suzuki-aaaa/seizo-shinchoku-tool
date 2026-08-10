@@ -148,6 +148,36 @@ tr.clickable:hover td{background:#f7f8fa}
 }
 .toast.show{opacity:1; transform:translateX(-50%) translateY(0)}
 
+/* ===== サイドメニュー・レイアウト（社内管理・顧客画面） ===== */
+.app{display:flex; min-height:100vh}
+.sidebar{width:236px; flex-shrink:0; background:#1e2632; color:#e7ebf1; display:flex; flex-direction:column; position:sticky; top:0; height:100vh}
+.sidebar .brand{display:flex; align-items:center; gap:10px; padding:20px 18px 16px; font-size:16px; font-weight:600; color:#fff}
+.sidebar .brand-ic{width:32px; height:32px; border-radius:9px; background:var(--accent); display:flex; align-items:center; justify-content:center; font-size:17px}
+.sidebar .brand small{display:block; font-size:11px; font-weight:400; color:#9aa6b6}
+.sidebar nav{flex:1; padding:6px 10px; display:flex; flex-direction:column; gap:2px; overflow-y:auto}
+.side-label{font-size:11px; color:#7d8a9c; padding:12px 12px 4px; letter-spacing:.04em}
+.nav-item{display:flex; align-items:center; gap:11px; padding:10px 12px; border-radius:9px; color:#aeb8c7; font-size:14px; cursor:pointer; text-decoration:none; border:none; background:none; width:100%; text-align:left; font-family:inherit}
+.nav-item .ni-ic{font-size:16px; width:20px; text-align:center}
+.nav-item:hover{background:rgba(255,255,255,.07); color:#fff}
+.nav-item.active{background:var(--accent); color:#fff}
+.side-foot{padding:10px; border-top:1px solid rgba(255,255,255,.08)}
+.content{flex:1; min-width:0; display:flex; flex-direction:column}
+.appbar{display:flex; align-items:center; gap:12px; padding:13px 22px; background:var(--card); border-bottom:1px solid var(--line); position:sticky; top:0; z-index:5}
+.appbar-title{font-size:16px; font-weight:600}
+.appbar-sub{font-size:12px; color:var(--muted)}
+.appbar-spacer{flex:1}
+.content-body{padding:22px; width:100%; max-width:1080px}
+.hamburger{display:none; background:none; border:1px solid var(--line); border-radius:8px; width:38px; height:38px; font-size:18px; cursor:pointer; align-items:center; justify-content:center; color:var(--text)}
+.backdrop{display:none; position:fixed; inset:0; background:rgba(0,0,0,.4); z-index:40}
+.login-screen{max-width:400px; margin:0 auto; padding:16px}
+@media(max-width:860px){
+  .sidebar{position:fixed; left:0; top:0; transform:translateX(-100%); transition:transform .25s; z-index:50; box-shadow:0 0 40px rgba(0,0,0,.35)}
+  .sidebar.open{transform:none}
+  .hamburger{display:inline-flex}
+  .backdrop.show{display:block}
+  .content-body{padding:16px}
+}
+
 /* 入口ページ */
 .launch{display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:14px; margin-top:20px}
 .launch a{display:block; background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:20px; color:var(--text)}

@@ -4,20 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>進捗確認 — お客様用</title>
-<link rel="stylesheet" href="styles.css?v=10">
+<link rel="stylesheet" href="styles.css?v=11">
 </head>
 <body>
-<div class="topbar">
-  <div>
-    <h1>進捗確認</h1>
-    <div class="sub" id="sub">お客様用ページ</div>
-  </div>
-  <span id="logoutBtn" class="btn btn-sm" style="display:none">ログアウト</span>
-</div>
-
 <!-- ログイン画面 -->
-<div class="wrap-narrow" id="loginView">
-  <div class="card" style="margin-top:24px">
+<div class="login-screen" id="loginView">
+  <div class="card" style="margin-top:60px">
     <h2>ログイン</h2>
     <label for="loginId">ログインID</label>
     <input type="text" id="loginId" autocomplete="username" placeholder="a-sha">
@@ -29,40 +21,59 @@
   </div>
 </div>
 
-<!-- 案件一覧・詳細 -->
-<div class="wrap" id="dataView" style="display:none">
-  <div id="listView">
-    <div class="card">
-      <h2 id="companyName"></h2>
-      <div id="projectList"></div>
+<!-- サイドバー付きアプリ -->
+<div class="app" id="dataView" style="display:none">
+  <aside class="sidebar" id="sidebar">
+    <div class="brand"><span class="brand-ic">📋</span><div id="brandCo">進捗確認<small>お客様ページ</small></div></div>
+    <nav>
+      <button class="nav-item active" id="navList"><span class="ni-ic">📁</span>案件一覧</button>
+    </nav>
+    <div class="side-foot">
+      <button class="nav-item" id="logoutBtn"><span class="ni-ic">⎋</span>ログアウト</button>
     </div>
-  </div>
-
-  <div id="detailView" style="display:none">
-    <p class="hint"><span class="btn btn-sm" id="backBtn">← 案件一覧</span></p>
-    <div class="card">
-      <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px">
-        <div>
-          <h2 id="dTitle" style="margin:0 0 4px"></h2>
-          <p class="hint" id="dMeta" style="margin:0"></p>
+  </aside>
+  <div class="backdrop" id="backdrop"></div>
+  <div class="content">
+    <div class="appbar">
+      <button class="hamburger" id="hamburger" aria-label="メニュー">☰</button>
+      <div>
+        <div class="appbar-title">進捗確認</div>
+        <div class="appbar-sub" id="sub">お客様</div>
+      </div>
+    </div>
+    <div class="content-body">
+      <div id="listView">
+        <div class="card">
+          <h2 id="companyName"></h2>
+          <div id="projectList"></div>
         </div>
-        <span id="dBadge"></span>
       </div>
-      <div style="display:flex; align-items:center; gap:10px; margin:14px 0 4px">
-        <div class="bar" id="dBarWrap" style="max-width:none"><span id="dBar" style="width:0%"></span></div>
-        <span id="dProg" style="font-weight:600; width:40px"></span>
+
+      <div id="detailView" style="display:none">
+        <p class="hint"><span class="btn btn-sm" id="backBtn">← 案件一覧</span></p>
+        <div class="card">
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px">
+            <div>
+              <h2 id="dTitle" style="margin:0 0 4px"></h2>
+              <p class="hint" id="dMeta" style="margin:0"></p>
+            </div>
+            <span id="dBadge"></span>
+          </div>
+          <div style="display:flex; align-items:center; gap:10px; margin:14px 0 4px">
+            <div class="bar" id="dBarWrap" style="max-width:none"><span id="dBar" style="width:0%"></span></div>
+            <span id="dProg" style="font-weight:600; width:40px"></span>
+          </div>
+        </div>
+        <div class="card">
+          <h2>進捗の履歴</h2>
+          <div class="timeline" id="timeline"></div>
+        </div>
       </div>
-    </div>
-    <div class="card">
-      <h2>進捗の履歴</h2>
-      <div class="timeline" id="timeline"></div>
     </div>
   </div>
-
-  <p class="hint" style="text-align:center"><a href="index.html">← 入口にもどる</a></p>
 </div>
 
-<script src="store.js?v=10"></script>
+<script src="store.js?v=11"></script>
 <script>
 // 顧客端末には他社ぶんを含むデータを保存しない（メモリ内キャッシュのみ）
 Store.disableDiskCache();
@@ -97,23 +108,33 @@ async function login(){
   }
 }
 
-document.getElementById("logoutBtn").onclick = ()=>{
-  sessionStorage.removeItem("mfg_customer");
-  location.reload();
+document.getElementById("logoutBtn").onclick = ()=>{ Store.logout(); sessionStorage.removeItem("mfg_customer"); location.reload(); };
+
+/* サイドメニュー開閉（スマホ） */
+function toggleSidebar(open){
+  const sb=document.getElementById("sidebar"), bd=document.getElementById("backdrop");
+  const show = open===undefined ? !sb.classList.contains("open") : open;
+  sb.classList.toggle("open", show); bd.classList.toggle("show", show);
+}
+document.getElementById("hamburger").onclick = ()=> toggleSidebar();
+document.getElementById("backdrop").onclick = ()=> toggleSidebar(false);
+document.getElementById("navList").onclick = ()=>{
+  document.getElementById("detailView").style.display="none";
+  document.getElementById("listView").style.display="block";
+  toggleSidebar(false);
 };
 
 function backToLogin(){
   Store.logout();
   document.getElementById("dataView").style.display="none";
-  document.getElementById("logoutBtn").style.display="none";
   document.getElementById("loginView").style.display="block";
 }
 
 async function showData(){
   document.getElementById("loginView").style.display="none";
-  document.getElementById("dataView").style.display="block";
-  document.getElementById("logoutBtn").style.display="inline-flex";
+  document.getElementById("dataView").style.display="";
   document.getElementById("sub").textContent = me.company + " 様";
+  document.getElementById("brandCo").innerHTML = me.company + "<small>進捗確認</small>";
   document.getElementById("companyName").textContent = me.company + " の案件";
   try{
     const all = await Store.getProjects();
