@@ -68,7 +68,8 @@ const Store = (() => {
   function getToken() { try { return sessionStorage.getItem(TOKEN_KEY) || ""; } catch (e) { return ""; } }
   function setToken(t) { try { sessionStorage.setItem(TOKEN_KEY, t); } catch (e) {} }
   function clearToken() { try { sessionStorage.removeItem(TOKEN_KEY); } catch (e) {} }
-  const _photoCache = {};   // fileId -> dataURL
+  const _photoCache = {};     // fileId -> dataURL
+  const _photoInflight = {};  // fileId -> Promise（重複取得の防止）
 
   /* ---------- GAS 呼び出し（本番モード・トークン付き） ---------- */
   async function gas(action, payload) {
@@ -235,7 +236,7 @@ const Store = (() => {
     logout() { clearToken(); _bundle = null; try { localStorage.removeItem(BUNDLE_CACHE); } catch (e) {} },
     hasToken() { return isDemo() ? true : !!getToken(); },
 
-    // 写真を認証API経由で取得（fileId → dataURL）。メモリにキャッシュ。
+    // 写真を認証API経由で取得（fileId → dataURL）。メモリにキャッシュ＋重複取得防止。
     async getPhoto(ref) {
       if (!ref) return "";
       const s = String(ref);
@@ -244,9 +245,26 @@ const Store = (() => {
       if (!id) return "";
       if (Util._override[id]) return Util._override[id];
       if (_photoCache[id]) return _photoCache[id];
-      const res = await gas("getPhotoData", { url: id });
-      _photoCache[id] = res.dataUrl;
-      return res.dataUrl;
+      if (_photoInflight[id]) return _photoInflight[id];
+      const p = gas("getPhotoData", { url: id })
+        .then(res => { _photoCache[id] = res.dataUrl; delete _photoInflight[id]; return res.dataUrl; })
+        .catch(e => { delete _photoInflight[id]; throw e; });
+      _photoInflight[id] = p;
+      return p;
+    },
+
+    // 複数の写真を1回のリクエストでまとめて取得（先読み・高速化）
+    async getPhotos(refs) {
+      if (isDemo()) return;
+      const ids = [...new Set((refs || [])
+        .map(r => (String(r).match(/[-\w]{25,}/) || [])[0])
+        .filter(id => id && !_photoCache[id] && !Util._override[id]))];
+      if (!ids.length) return;
+      try {
+        const res = await gas("getPhotos", { ids });
+        const map = res.photos || {};
+        Object.keys(map).forEach(id => { _photoCache[id] = map[id]; });
+      } catch (e) {}
     },
 
     // デモデータを初期状態に戻す（動作確認用）
@@ -284,14 +302,15 @@ const Util = {
     return String(raw).split(/\n+/).map(s => s.trim()).filter(Boolean);
   },
 
-  // <img data-ph="fileId"> を認証API経由の画像で埋める（描画後に呼ぶ）
-  hydratePhotos(root) {
+  // <img data-ph="fileId"> を認証API経由の画像で埋める（描画後に呼ぶ）。
+  // まず1回のリクエストでまとめて取得→各imgに反映（クリック時はキャッシュから即開く）。
+  async hydratePhotos(root) {
     const scope = root || document;
-    scope.querySelectorAll("img[data-ph]").forEach(img => {
-      if (img.dataset.phLoaded) return;
-      img.dataset.phLoaded = "1";
-      Store.getPhoto(img.getAttribute("data-ph")).then(d => { if (d) img.src = d; }).catch(() => {});
-    });
+    const imgs = [...scope.querySelectorAll("img[data-ph]")].filter(im => !im.dataset.phLoaded);
+    if (!imgs.length) return;
+    imgs.forEach(im => im.dataset.phLoaded = "1");
+    await Store.getPhotos(imgs.map(im => im.getAttribute("data-ph")));
+    imgs.forEach(im => Store.getPhoto(im.getAttribute("data-ph")).then(d => { if (d) im.src = d; }).catch(() => {}));
   },
 
   // 写真をポップアップで大きく表示。配列＋開始位置なら前後めくり。画像は認証API経由で読み込む。
@@ -323,8 +342,8 @@ const Util = {
     document.body.appendChild(ov);
     show();
   },
-  // 撮影画像を縮小して dataURL(JPEG) に変換（保存容量を抑える）
-  fileToResizedDataUrl(file, maxSize = 900, quality = 0.6) {
+  // 撮影画像を縮小して dataURL(JPEG) に変換（大きめ・きれいめ）
+  fileToResizedDataUrl(file, maxSize = 1500, quality = 0.72) {
     return new Promise((resolve, reject) => {
       const img = new Image();
       const reader = new FileReader();

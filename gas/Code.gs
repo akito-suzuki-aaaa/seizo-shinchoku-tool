@@ -109,6 +109,7 @@ function route(action, req) {
     case "employeeLogin":  return employeeLogin(req.password);
     case "getBundle":      return getBundleData(req.token);
     case "getPhotoData":   return { dataUrl: getPhotoData(req.token, req.url) };
+    case "getPhotos":      return { photos: getPhotosData(req.token, req.ids) };
     case "addLog":         return addLog(req.token, req.log);
     case "overwritePhoto": return overwritePhoto(req.token, req.logId, req.oldUrl, req.newDataUrl);
     case "lockdownPhotos": return lockdownPhotos(req.token);
@@ -250,6 +251,37 @@ function customerOwnsPhoto(customerId, fileId) {
   const mine = {};
   readAll("projects").forEach(p => { if (p.customerId === customerId) mine[p.id] = 1; });
   return readAll("logs").some(l => mine[l.projectId] && String(l.photo).indexOf(fileId) >= 0);
+}
+
+// 複数写真を1回でまとめて配信（先読み高速化用）
+function getPhotosData(token, ids) {
+  const s = requireSession(token);
+  const out = {};
+  let owned = null;
+  (ids || []).slice(0, 24).forEach(ref => {
+    const id = extractDriveId(ref);
+    if (!id || out[id]) return;
+    if (s.role === "customer") {
+      if (owned === null) owned = customerOwnedFileIds(s.refId);
+      if (!owned[id]) return;
+    }
+    try {
+      const b = DriveApp.getFileById(id).getBlob();
+      out[id] = "data:" + b.getContentType() + ";base64," + Utilities.base64Encode(b.getBytes());
+    } catch (e) {}
+  });
+  return out;
+}
+// 顧客が閲覧してよい写真fileIdの集合を一度だけ作る
+function customerOwnedFileIds(customerId) {
+  const mine = {};
+  readAll("projects").forEach(p => { if (p.customerId === customerId) mine[p.id] = 1; });
+  const set = {};
+  readAll("logs").forEach(l => {
+    if (!mine[l.projectId]) return;
+    String(l.photo).split(/\n+/).forEach(u => { const id = extractDriveId(u); if (id) set[id] = 1; });
+  });
+  return set;
 }
 
 /* ---------- Drive 保存（非公開・共有しない） ---------- */
