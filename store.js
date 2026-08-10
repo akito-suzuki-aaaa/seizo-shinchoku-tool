@@ -64,10 +64,12 @@ const Store = (() => {
   function save(db) { localStorage.setItem(LS_KEY, JSON.stringify(db)); }
 
   /* ---------- 認証トークン（ログイン状態） ---------- */
-  const TOKEN_KEY = "mfg_token";
+  const TOKEN_KEY = "mfg_token", ROLE_KEY = "mfg_role";
   function getToken() { try { return sessionStorage.getItem(TOKEN_KEY) || ""; } catch (e) { return ""; } }
   function setToken(t) { try { sessionStorage.setItem(TOKEN_KEY, t); } catch (e) {} }
-  function clearToken() { try { sessionStorage.removeItem(TOKEN_KEY); } catch (e) {} }
+  function clearToken() { try { sessionStorage.removeItem(TOKEN_KEY); sessionStorage.removeItem(ROLE_KEY); } catch (e) {} }
+  function setRole(r) { try { sessionStorage.setItem(ROLE_KEY, r); } catch (e) {} }
+  function getRole() { try { return sessionStorage.getItem(ROLE_KEY) || ""; } catch (e) { return ""; } }
   const _photoCache = {};     // fileId -> dataURL
   const _photoInflight = {};  // fileId -> Promise（重複取得の防止）
 
@@ -221,20 +223,21 @@ const Store = (() => {
         return { id: c.id, company: c.company, role: "customer" };
       }
       const r = await gas("login", { loginId, password });
-      setToken(r.token); _bundle = null; try { localStorage.removeItem(BUNDLE_CACHE); } catch (e) {}
+      setToken(r.token); setRole("customer"); _bundle = null; try { localStorage.removeItem(BUNDLE_CACHE); } catch (e) {}
       return r;
     },
 
     // 社員ログイン（共通パスワード）
     async loginEmployee(password) {
-      if (isDemo()) { setToken("demo-emp"); return { role: "employee" }; }
+      if (isDemo()) { setToken("demo-emp"); setRole("employee"); return { role: "employee" }; }
       const r = await gas("employeeLogin", { password });
-      setToken(r.token); _bundle = null; try { localStorage.removeItem(BUNDLE_CACHE); } catch (e) {}
+      setToken(r.token); setRole("employee"); _bundle = null; try { localStorage.removeItem(BUNDLE_CACHE); } catch (e) {}
       return r;
     },
 
     logout() { clearToken(); _bundle = null; try { localStorage.removeItem(BUNDLE_CACHE); } catch (e) {} },
     hasToken() { return isDemo() ? true : !!getToken(); },
+    role() { return isDemo() ? "employee" : getRole(); },
 
     // 写真を認証API経由で取得（fileId → dataURL）。メモリにキャッシュ＋重複取得防止。
     async getPhoto(ref) {

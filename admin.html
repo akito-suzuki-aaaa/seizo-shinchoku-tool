@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>社内管理 — 進捗データベース</title>
-<link rel="stylesheet" href="styles.css?v=15">
+<link rel="stylesheet" href="styles.css?v=16">
 </head>
 <body>
 <div class="login-screen" id="empLogin" style="display:none">
@@ -77,8 +77,8 @@
 
 <div class="toast" id="toast"></div>
 
-<script src="store.js?v=15"></script>
-<script src="annotate.js?v=15"></script>
+<script src="store.js?v=16"></script>
+<script src="annotate.js?v=16"></script>
 <script>
 let projects=[], allLogs=[], processMap={}, currentProjectId=null, adminPhotoSets={};
 
@@ -260,7 +260,7 @@ document.getElementById("logoutBtn").onclick = ()=>{ Store.logout(); location.re
 function showEmpLogin(){ document.getElementById("empLogin").style.display="block"; document.getElementById("adminMain").style.display="none"; }
 function showAdminMain(){ document.getElementById("empLogin").style.display="none"; document.getElementById("adminMain").style.display=""; }
 async function start(){
-  if(Store.hasToken()){
+  if(Store.hasToken() && Store.role()==="employee"){
     showAdminMain();
     try{ await init(); }
     catch(e){ if(e.auth){ Store.logout(); showEmpLogin(); } else { toast("エラー: "+e.message); } }

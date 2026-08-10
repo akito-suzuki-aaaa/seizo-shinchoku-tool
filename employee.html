@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <title>進捗を記録 — 社員用</title>
-<link rel="stylesheet" href="styles.css?v=15">
+<link rel="stylesheet" href="styles.css?v=16">
 </head>
 <body>
 <div class="topbar">
@@ -80,8 +80,8 @@
 
 <div class="toast" id="toast"></div>
 
-<script src="store.js?v=15"></script>
-<script src="annotate.js?v=15"></script>
+<script src="store.js?v=16"></script>
+<script src="annotate.js?v=16"></script>
 <script>
 let photos = [];
 
@@ -170,7 +170,7 @@ function toast(msg){
 function showEmpLogin(){ document.getElementById("empLogin").style.display="block"; document.getElementById("empMain").style.display="none"; }
 function showEmpMain(){ document.getElementById("empLogin").style.display="none"; document.getElementById("empMain").style.display="block"; }
 async function start(){
-  if(Store.hasToken()){
+  if(Store.hasToken() && Store.role()==="employee"){
     showEmpMain();
     try{ await init(); }
     catch(e){ if(e.auth){ Store.logout(); showEmpLogin(); } else { toast("エラー: "+e.message); } }
