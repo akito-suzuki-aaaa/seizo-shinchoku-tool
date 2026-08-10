@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <title>進捗を記録 — 社員用</title>
-<link rel="stylesheet" href="styles.css?v=14">
+<link rel="stylesheet" href="styles.css?v=15">
 </head>
 <body>
 <div class="topbar">
@@ -59,7 +59,7 @@
     <textarea id="comment" placeholder="作業内容・気づき・不具合など"></textarea>
 
     <label>写真（複数可）</label>
-    <div class="thumbs gallery" id="thumbs"></div>
+    <div class="thumbs" id="thumbs"></div>
     <div class="row" style="margin-top:8px">
       <button type="button" class="btn" id="btnCam">📷 撮影</button>
       <button type="button" class="btn" id="btnLib">🖼 画像を選ぶ</button>
@@ -80,8 +80,8 @@
 
 <div class="toast" id="toast"></div>
 
-<script src="store.js?v=14"></script>
-<script src="annotate.js?v=14"></script>
+<script src="store.js?v=15"></script>
+<script src="annotate.js?v=15"></script>
 <script>
 let photos = [];
 
