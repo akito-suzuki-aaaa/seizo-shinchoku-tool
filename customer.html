@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>進捗確認 — お客様用</title>
-<link rel="stylesheet" href="styles.css?v=16">
+<link rel="stylesheet" href="styles.css?v=17">
 </head>
 <body>
 <!-- ログイン画面 -->
@@ -24,7 +24,7 @@
 <!-- サイドバー付きアプリ -->
 <div class="app" id="dataView" style="display:none">
   <aside class="sidebar" id="sidebar">
-    <div class="brand"><span class="brand-ic" id="brandIc">進</span><div id="brandCo">進捗確認<small>お客様ページ</small></div></div>
+    <div class="brand"><span class="brand-mark"><svg viewBox="0 0 24 24"><rect x="3" y="13" width="4" height="8" rx="1"/><rect x="10" y="8" width="4" height="13" rx="1"/><rect x="17" y="4" width="4" height="17" rx="1"/></svg></span><div id="brandCo">進捗確認<small>お客様ページ</small></div></div>
     <nav>
       <button class="nav-item active" id="navList"><span class="ni-ic"><svg viewBox="0 0 24 24"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg></span>案件一覧</button>
     </nav>
@@ -73,7 +73,7 @@
   </div>
 </div>
 
-<script src="store.js?v=16"></script>
+<script src="store.js?v=17"></script>
 <script>
 // 顧客端末には他社ぶんを含むデータを保存しない（メモリ内キャッシュのみ）
 Store.disableDiskCache();
@@ -135,7 +135,6 @@ async function showData(){
   document.getElementById("dataView").style.display="";
   document.getElementById("sub").textContent = me.company + " 様";
   document.getElementById("brandCo").innerHTML = me.company + "<small>進捗確認</small>";
-  document.getElementById("brandIc").textContent = (me.company || "進").charAt(0);
   document.getElementById("companyName").textContent = me.company + " の案件";
   try{
     const all = await Store.getProjects();
